@@ -190,8 +190,13 @@ def solve(F: Callable,
         if epoch % print_every == 0:
             print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
     print(f"Final Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
-    return get_y_trial(a, ics, NN)
-    
+    NN.eval()
+    y_trial_grad = get_y_trial(a, ics, NN)
+
+    def y_trial(x):
+        with torch.no_grad():
+            return y_trial_grad(x)
+    return y_trial
 
 
 
