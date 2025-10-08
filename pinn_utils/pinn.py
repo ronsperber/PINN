@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import List, Callable, Union
+from typing import List, Callable, Union, Optional
 
 def factorials_up_to_n(n :int) -> torch.Tensor:
     """
@@ -125,7 +125,8 @@ def solve(F: Callable,
           lr: float = 1e-3,
           batch_size: int = None,
           print_every: int = 500,
-          val_size: Union[float, int] = 0.2
+          val_size: Union[float, int] = 0.2,
+          early_stopping: Optional[dict] = None
           ):
     loss_fn = get_loss(a, ics, NN, F)
     n_points = x.shape[0]
@@ -143,8 +144,12 @@ def solve(F: Callable,
     x_val = x[:val_size]
     x_train = x[val_size:]
     n_train = x_train.shape[0]
-        
-
+    if early_stopping is not None:
+        min_epochs = early_stopping.get('min_epochs', 20)
+        patience = early_stopping.get('patience', 10)
+        best_val_loss = float('inf')
+        epochs_since_best = 0
+        best_weights = None
     optimizer = torch.optim.Adam(params=NN.parameters(), lr=lr)
     for epoch in range(1, epochs + 1):
         NN.train()
@@ -168,11 +173,23 @@ def solve(F: Callable,
                 epoch_loss += loss.item() * len(idx)
                 optimizer.step()
             epoch_loss /= n_train
-            NN.eval()
-            val_loss = loss_fn(x_val).item()
-            NN.train()
+        NN.eval()
+        val_loss = loss_fn(x_val).item()
+        if early_stopping is not None:
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                epochs_since_best = 0
+                best_weights = {k: v.clone().detach() for k, v in NN.state_dict().items()}
+            else:
+                epochs_since_best += 1
+            if epochs_since_best >= patience and epoch >= min_epochs:
+                print(f"Early stopping at epoch {epoch}, validation loss did not improve for {early_stopping['patience']} epochs")
+                NN.load_state_dict(best_weights)
+                break
+        NN.train()
         if epoch % print_every == 0:
-            print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss: .06f}")
+            print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
+    print(f"Final Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
     return get_y_trial(a, ics, NN)
     
 
