@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import List, Callable
+from typing import List, Callable, Union
 
 def factorials_up_to_n(n :int) -> torch.Tensor:
     """
@@ -120,16 +120,34 @@ def solve(F: Callable,
           a : float,
           ics: List[float],
           NN: PINN,
-          x_train: torch.Tensor,
+          x: torch.Tensor,
           epochs: int = 5000,
           lr: float = 1e-3,
           batch_size: int = None,
-          print_every: int = 500
+          print_every: int = 500,
+          val_size: Union[float, int] = 0.2
           ):
     loss_fn = get_loss(a, ics, NN, F)
-    n_points = x_train.shape[0]
+    n_points = x.shape[0]
+    if isinstance(val_size, int):
+        if val_size <=0 or val_size >= n_points:
+            raise ValueError("Not a valid validation size")
+    elif isinstance(val_size, float):
+        if val_size <=0 or val_size >= 1:
+            raise ValueError("Not a valid validation size")
+        else:
+            val_size = int(n_points * val_size)
+    else:
+        raise TypeError("Validation size must be int or float")
+    perm = torch.randperm(n_points)
+    x_val = x[:val_size]
+    x_train = x[val_size:]
+    n_train = x_train.shape[0]
+        
+
     optimizer = torch.optim.Adam(params=NN.parameters(), lr=lr)
     for epoch in range(1, epochs + 1):
+        NN.train()
         if batch_size is None:
             optimizer.zero_grad()
             loss = loss_fn(x_train)
@@ -138,20 +156,23 @@ def solve(F: Callable,
             optimizer.step()
         else:
             # shuffle every epoch to get new batches
-            perm = torch.randperm(n_points)
+            perm = torch.randperm(n_train)
             epoch_loss = 0.0
-            for i in range(0, n_points, batch_size):
+            for i in range(0, n_train, batch_size):
                 optimizer.zero_grad()
-                end = min(i+batch_size, n_points)
+                end = min(i+batch_size, n_train)
                 idx = perm[i:end]
                 x_batch = x_train[idx]
                 loss = loss_fn(x_batch)
                 loss.backward()
                 epoch_loss += loss.item() * len(idx)
                 optimizer.step()
-            epoch_loss /= n_points
+            epoch_loss /= n_train
+            NN.eval()
+            val_loss = loss_fn(x_val).item()
+            NN.train()
         if epoch % print_every == 0:
-            print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}")
+            print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss: .06f}")
     return get_y_trial(a, ics, NN)
     
 
