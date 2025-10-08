@@ -122,17 +122,36 @@ def solve(F: Callable,
           NN: PINN,
           x_train: torch.Tensor,
           epochs: int = 5000,
-          lr: float = 1e-3
+          lr: float = 1e-3,
+          batch_size: int = None,
+          print_every: int = 500
           ):
     loss_fn = get_loss(a, ics, NN, F)
+    n_points = x_train.shape[0]
     optimizer = torch.optim.Adam(params=NN.parameters(), lr=lr)
     for epoch in range(1, epochs + 1):
-        optimizer.zero_grad()
-        loss = loss_fn(x_train)
-        loss.backward()
-        optimizer.step()
-        if epoch % 500 == 0:
-            print(f"Epoch {epoch}, Loss: {loss.item():.6f}")
+        if batch_size is None:
+            optimizer.zero_grad()
+            loss = loss_fn(x_train)
+            loss.backward()
+            epoch_loss = loss.item()
+            optimizer.step()
+        else:
+            # shuffle every epoch to get new batches
+            perm = torch.randperm(n_points)
+            epoch_loss = 0.0
+            for i in range(0, n_points, batch_size):
+                optimizer.zero_grad()
+                end = min(i+batch_size, n_points)
+                idx = perm[i:end]
+                x_batch = x_train[idx]
+                loss = loss_fn(x_batch)
+                loss.backward()
+                epoch_loss += loss.item() * len(idx)
+                optimizer.step()
+            epoch_loss /= n_points
+        if epoch % print_every == 0:
+            print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}")
     return get_y_trial(a, ics, NN)
     
 
