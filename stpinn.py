@@ -1,13 +1,13 @@
 
 import sys, os
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import streamlit as st
 import importlib
 import torch
 import numpy as np
-from PINN.pinn_utils import pinn
+from pinn_utils import pinn
 import matplotlib.pyplot as plt
 importlib.reload(pinn)
 
