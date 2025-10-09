@@ -4,11 +4,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import streamlit as st
+import importlib
 import torch
 import numpy as np
 from PINN.pinn_utils import pinn
 import matplotlib.pyplot as plt
-
+importlib.reload(pinn)
 
 st.title("PINN ODE Solver")
 
@@ -27,7 +28,6 @@ with st.sidebar:
 
 if st.button("Solve"):
     x_train = torch.linspace(x_start, x_end, n_points).reshape(-1, 1).requires_grad_(True)
-
     # Map choice to function
     if ode_choice == "y' = y":
         F = lambda x, y, dy: dy - y
@@ -41,7 +41,7 @@ if st.button("Solve"):
 
     NN = pinn.PINN(num_hidden_layers=num_hidden_layers, layer_width=layer_width)
     with st.spinner("Solving..."):
-        y_trial = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, batch_size = 64, val_size = 0.1, lr=lr)
+        y_trial = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr)
     y_pred = y_trial(x_train)
     x_np = x_train.detach().numpy()
     y_np = y_pred.detach().numpy()

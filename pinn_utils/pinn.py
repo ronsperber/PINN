@@ -140,13 +140,12 @@ def solve(F: Callable,
             val_size = int(n_points * val_size)
     else:
         raise TypeError("Validation size must be int or float")
-    perm = torch.randperm(n_points)
     if x.requires_grad:
-        x_val = x[perm[:val_size]].detach().clone().requires_grad_(True)
-        x_train = x[perm[val_size:]].detach().clone().requires_grad_(True)
-    else:
-        x_val =x[perm[:val_size]].requires_grad_(True)
-        x_train=x[perm[val_size:]].requires_grad_(True)
+        x = x.detach().clone().requires_grad_(False)
+    perm = torch.randperm(n_points)
+    x_val = x[perm[:val_size]].requires_grad_(True)
+    x_train = x[perm[val_size:]].requires_grad_(True)
+
 
     n_train = x_train.shape[0]
     if early_stopping is not None:
