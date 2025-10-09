@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from pinn_utils import pinn
 import matplotlib.pyplot as plt
+import time
 importlib.reload(pinn)
 
 st.title("PINN ODE Solver")
@@ -37,31 +38,42 @@ if st.button("Solve"):
     NN = pinn.PINN(num_hidden_layers=num_hidden_layers, layer_width=layer_width)
     with st.spinner("Solving..."):
         y_trial, checkpoints = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr, return_checkpoints=True)
-    x_np = x_train.detach().numpy()
-    fig, ax = plt.subplots()
-    ax.set_title("PINN Solution Progress")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.grid()
-
-    # Plot true solution if available
-    if true_sol is not None:
-        y_true = true_sol(x_np)
-        ax.plot(x_np, y_true, label="True Solution", color="green")
-
-    # Line for prediction
-    pred_line, = ax.plot([], [], label="Prediction", color="red")
-    ax.legend()
-
-    # Container for Streamlit to update plot in place
-    plot_placeholder = st.empty()
-
-    # Animate through checkpoints (functions)
-    for epoch, y_trial_fn in checkpoints:
-        y_np = y_trial_fn(x_train).detach().numpy()  # evaluate function at x_train
-        pred_line.set_data(x_np, y_np)
-        ax.relim()
-        ax.autoscale_view()
-        plot_placeholder.pyplot(fig)  # update plot in place
-        st.write(f"Epoch {epoch}")
+        plot_placeholder = st.empty()
+        for checkpoint in checkpoints:
+            fig, ax = plt.subplots()
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.grid()
     
+            # Prediction
+            y_pred = checkpoint[1](x_train)
+            ax.plot(x_train.detach().numpy(), y_pred.detach().numpy(), label="Prediction")
+    
+            # True solution, if available
+            if true_sol is not None:
+                y_true = true_sol(x_train.detach().numpy())
+                ax.plot(x_train.detach().numpy(), y_true, label="True Solution", linestyle="--")
+    
+            ax.set_title(f"Solution to {ode_choice}, y({x0}) = {y0} \n Epoch {checkpoint[0]}")
+            ax.legend()
+    
+            # Update the same plot each iteration
+            plot_placeholder.pyplot(fig)
+            plt.close(fig)
+            time.sleep(0.025)
+        st.markdown("### Final PINN Solution")
+        fig_final, ax_final = plt.subplots()
+        final_pred = y_trial(x_train)
+        ax_final.plot(x_train.detach().numpy(), final_pred.detach().numpy(), label="Final Prediction")
+
+        if true_sol is not None:
+            y_true = true_sol(x_train.detach().numpy())
+            ax_final.plot(x_train.detach().numpy(), y_true, linestyle="--", label="True Solution")
+
+        ax_final.set_title("Final PINN Solution")
+        ax_final.set_xlabel("x")
+        ax_final.set_ylabel("y")
+        ax_final.grid()
+        ax_final.legend()
+        st.pyplot(fig_final)
+        plt.close(fig_final)
