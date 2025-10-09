@@ -36,18 +36,32 @@ if st.button("Solve"):
 
     NN = pinn.PINN(num_hidden_layers=num_hidden_layers, layer_width=layer_width)
     with st.spinner("Solving..."):
-        y_trial = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr)
-    y_pred = y_trial(x_train)
+        y_trial, checkpoints = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr, return_checkpoints=True)
     x_np = x_train.detach().numpy()
-    y_np = y_pred.detach().numpy()
     fig, ax = plt.subplots()
-    ax.plot(x_np, y_np, label="Prediction")
-    if true_sol is not None:
-        y_true = true_sol(x_np)
-        ax.plot(x_np, y_true, label = "True Solution", linestyle = "--")
+    ax.set_title("PINN Solution Progress")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
-    ax.legend()
     ax.grid()
-    st.pyplot(fig)
 
+    # Plot true solution if available
+    if true_sol is not None:
+        y_true = true_sol(x_np)
+        ax.plot(x_np, y_true, label="True Solution", color="green")
+
+    # Line for prediction
+    pred_line, = ax.plot([], [], label="Prediction", color="red")
+    ax.legend()
+
+    # Container for Streamlit to update plot in place
+    plot_placeholder = st.empty()
+
+    # Animate through checkpoints (functions)
+    for epoch, y_trial_fn in checkpoints:
+        y_np = y_trial_fn(x_train).detach().numpy()  # evaluate function at x_train
+        pred_line.set_data(x_np, y_np)
+        ax.relim()
+        ax.autoscale_view()
+        plot_placeholder.pyplot(fig)  # update plot in place
+        st.write(f"Epoch {epoch}")
+    
