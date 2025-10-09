@@ -141,8 +141,13 @@ def solve(F: Callable,
     else:
         raise TypeError("Validation size must be int or float")
     perm = torch.randperm(n_points)
-    x_val = x[:val_size]
-    x_train = x[val_size:]
+    if x.requires_grad:
+        x_val = x[perm[:val_size]].detach().clone().requires_grad_(True)
+        x_train = x[perm[val_size:]].detach().clone().requires_grad_(True)
+    else:
+        x_val =x[perm[:val_size]].requires_grad_(True)
+        x_train=x[perm[val_size:]].requires_grad_(True)
+
     n_train = x_train.shape[0]
     if early_stopping is not None:
         min_epochs = early_stopping.get('min_epochs', 20)
