@@ -39,33 +39,39 @@ if st.button("Solve"):
     with st.spinner("Solving..."):
         y_trial, checkpoints = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr, return_checkpoints=True)
         plot_placeholder = st.empty()
+        x_np = x_train.detach().numpy()
+
+        fig, ax = plt.subplots()
+
         for checkpoint in checkpoints + [("final", y_trial)]:
-            fig, ax = plt.subplots()
+            ax.cla()  # Clear axes, not the figure
             ax.set_xlabel("x")
             ax.set_ylabel("y")
             ax.grid()
-    
+
             # Prediction
-            y_pred = checkpoint[1](x_train)
-            ax.plot(x_train.detach().numpy(), y_pred.detach().numpy(), label="Prediction")
-    
-            # True solution, if available
+            y_pred = checkpoint[1](x_train).detach().numpy()
+            ax.plot(x_np, y_pred, label="Prediction")
+
+            # True solution
             if true_sol is not None:
-                y_true = true_sol(x_train.detach().numpy())
-                ax.plot(x_train.detach().numpy(), y_true, label="True Solution", linestyle="--")
+                y_true = true_sol(x_np)
+                ax.plot(x_np, y_true, "--", label="True Solution")
+
+            # Title
             if isinstance(checkpoint[0], int):
-                title = f"Solution to {ode_choice}, y({x0}) = {y0} \n Epoch {checkpoint[0]}"
+                title = f"Solution to {ode_choice}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
             else:
                 title = f"Final Solution to {ode_choice}, y({x0}) = {y0}"
             ax.set_title(title)
             ax.legend()
-    
-            # Update the same plot each iteration
+
             plot_placeholder.pyplot(fig)
-            plt.close(fig)
             time.sleep(0.025)
-        if true_sol is not None:
-            y_true = true_sol(x_train.detach().numpy())
-            y_pred = y_trial(x_train).detach().numpy()
-            mse = ((y_true - y_pred)**2).mean()
-            st.write(f"MSE for PINN solution: {mse:.8f}")
+
+            plt.close(fig)
+    if true_sol is not None:
+        y_true = true_sol(x_train.detach().numpy())
+        y_pred = y_trial(x_train).detach().numpy()
+        mse = ((y_true - y_pred)**2).mean()
+        st.write(f"MSE for PINN solution: {mse:.8f}")
