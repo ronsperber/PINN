@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from pinn_utils import pinn
 import plotly.graph_objects as go
+import time
 importlib.reload(pinn)
 
 
@@ -166,13 +167,25 @@ if 'frames' in st.session_state:
                     st.error("No frames available to build GIF.")
                 else:
                     progress = st.progress(0)
+                    est_text = st.empty()
                     with st.spinner("Preparing GIF — rendering frames..."):
+                        # measure first few frames to estimate total time
+                        sample_count = min(2, frames_count)
+                        sample_times = []
                         for idx, fr in enumerate(plotly_frames):
+                            start = time.time()
                             temp_fig = go.Figure(data=fr.data, layout=fr.layout)
                             png = temp_fig.to_image(format='png')
                             img = Image.open(io.BytesIO(png)).convert('RGBA')
                             imgs.append(img)
+                            elapsed = time.time() - start
+                            if idx < sample_count:
+                                sample_times.append(elapsed)
+                                avg = sum(sample_times) / len(sample_times)
+                                est_total = avg * frames_count
+                                est_text.text(f"Estimated total render time: {est_total:.1f}s")
                             progress.progress(int((idx + 1) / frames_count * 100))
+                        est_text.empty()
 
                     bio = io.BytesIO()
                     imgs[0].save(bio, format='GIF', save_all=True, append_images=imgs[1:], duration=200, loop=0)
