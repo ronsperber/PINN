@@ -169,8 +169,7 @@ if 'frames' in st.session_state:
                     progress = st.progress(0)
                     est_text = st.empty()
                     with st.spinner("Preparing GIF — rendering frames..."):
-                        # measure first few frames to estimate total time
-                        sample_count = min(2, frames_count)
+                        # measure frames and provide a running "time left" estimate
                         sample_times = []
                         for idx, fr in enumerate(plotly_frames):
                             start = time.time()
@@ -179,11 +178,11 @@ if 'frames' in st.session_state:
                             img = Image.open(io.BytesIO(png)).convert('RGBA')
                             imgs.append(img)
                             elapsed = time.time() - start
-                            if idx < sample_count:
-                                sample_times.append(elapsed)
-                                avg = sum(sample_times) / len(sample_times)
-                                est_total = avg * frames_count
-                                est_text.text(f"Estimated total render time: {est_total:.1f}s")
+                            sample_times.append(elapsed)
+                            avg = sum(sample_times) / len(sample_times)
+                            frames_left = frames_count - (idx + 1)
+                            est_left = avg * frames_left
+                            est_text.text(f"Estimated time left: {est_left:.1f}s")
                             progress.progress(int((idx + 1) / frames_count * 100))
                         est_text.empty()
 
