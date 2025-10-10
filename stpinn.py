@@ -161,16 +161,19 @@ if 'frames' in st.session_state:
                 from PIL import Image
 
                 imgs = []
-                # Render each frame to PNG and collect as PIL Images
-                for fr in plotly_frames:
-                    temp_fig = go.Figure(data=fr.data, layout=fr.layout)
-                    png = temp_fig.to_image(format='png')
-                    img = Image.open(io.BytesIO(png)).convert('RGBA')
-                    imgs.append(img)
-
-                if not imgs:
+                frames_count = len(plotly_frames)
+                if frames_count == 0:
                     st.error("No frames available to build GIF.")
                 else:
+                    progress = st.progress(0)
+                    with st.spinner("Preparing GIF — rendering frames..."):
+                        for idx, fr in enumerate(plotly_frames):
+                            temp_fig = go.Figure(data=fr.data, layout=fr.layout)
+                            png = temp_fig.to_image(format='png')
+                            img = Image.open(io.BytesIO(png)).convert('RGBA')
+                            imgs.append(img)
+                            progress.progress(int((idx + 1) / frames_count * 100))
+
                     bio = io.BytesIO()
                     imgs[0].save(bio, format='GIF', save_all=True, append_images=imgs[1:], duration=200, loop=0)
                     bio.seek(0)
