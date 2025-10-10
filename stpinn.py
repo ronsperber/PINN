@@ -39,7 +39,7 @@ if st.button("Solve"):
     with st.spinner("Solving..."):
         y_trial, checkpoints = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr, return_checkpoints=True)
         plot_placeholder = st.empty()
-        for checkpoint in checkpoints:
+        for checkpoint in checkpoints + [("final", y_trial)]:
             fig, ax = plt.subplots()
             ax.set_xlabel("x")
             ax.set_ylabel("y")
@@ -53,27 +53,19 @@ if st.button("Solve"):
             if true_sol is not None:
                 y_true = true_sol(x_train.detach().numpy())
                 ax.plot(x_train.detach().numpy(), y_true, label="True Solution", linestyle="--")
-    
-            ax.set_title(f"Solution to {ode_choice}, y({x0}) = {y0} \n Epoch {checkpoint[0]}")
+            if isinstance(checkpoint[0], int):
+                title = f"Solution to {ode_choice}, y({x0}) = {y0} \n Epoch {checkpoint[0]}"
+            else:
+                title = f"Final Solution to {ode_choice}, y({x0}) = {y0}"
+            ax.set_title(title)
             ax.legend()
     
             # Update the same plot each iteration
             plot_placeholder.pyplot(fig)
             plt.close(fig)
             time.sleep(0.025)
-        st.markdown("### Final PINN Solution")
-        fig_final, ax_final = plt.subplots()
-        final_pred = y_trial(x_train)
-        ax_final.plot(x_train.detach().numpy(), final_pred.detach().numpy(), label="Final Prediction")
-
         if true_sol is not None:
             y_true = true_sol(x_train.detach().numpy())
-            ax_final.plot(x_train.detach().numpy(), y_true, linestyle="--", label="True Solution")
-
-        ax_final.set_title("Final PINN Solution")
-        ax_final.set_xlabel("x")
-        ax_final.set_ylabel("y")
-        ax_final.grid()
-        ax_final.legend()
-        st.pyplot(fig_final)
-        plt.close(fig_final)
+            y_pred = y_trial(x_train).detach().numpy()
+            mse = ((y_true - y_pred)**2).mean()
+            st.write(f"MSE for PINN solution: {mse:.8f}")
