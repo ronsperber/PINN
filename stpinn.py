@@ -1,14 +1,10 @@
-
-import sys, os
-from pathlib import Path
-# sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 import streamlit as st
 import importlib
 import torch
 import numpy as np
 from pinn_utils import pinn
 import matplotlib.pyplot as plt
+import time
 importlib.reload(pinn)
 
 st.title("PINN ODE Solver")
@@ -41,18 +37,41 @@ if st.button("Solve"):
 
     NN = pinn.PINN(num_hidden_layers=num_hidden_layers, layer_width=layer_width)
     with st.spinner("Solving..."):
-        y_trial = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr)
-    y_pred = y_trial(x_train)
-    x_np = x_train.detach().numpy()
-    y_np = y_pred.detach().numpy()
-    fig, ax = plt.subplots()
-    ax.plot(x_np, y_np, label="Prediction")
-    if true_sol is not None:
-        y_true = true_sol(x_np)
-        ax.plot(x_np, y_true, label = "True Solution", linestyle = "--")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.legend()
-    ax.grid()
-    st.pyplot(fig)
+        y_trial, checkpoints = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size = 0.1, lr=lr, return_checkpoints=True)
+        plot_placeholder = st.empty()
+        x_np = x_train.detach().numpy()
 
+        fig, ax = plt.subplots()
+
+        for checkpoint in checkpoints + [("final", y_trial)]:
+            ax.cla()  # Clear axes, not the figure
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.grid()
+
+            # Prediction
+            y_pred = checkpoint[1](x_train).detach().numpy()
+            ax.plot(x_np, y_pred, label="Prediction")
+
+            # True solution
+            if true_sol is not None:
+                y_true = true_sol(x_np)
+                ax.plot(x_np, y_true, "--", label="True Solution")
+
+            # Title
+            if isinstance(checkpoint[0], int):
+                title = f"Solution to {ode_choice}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
+            else:
+                title = f"Final Solution to {ode_choice}, y({x0}) = {y0}"
+            ax.set_title(title)
+            ax.legend()
+
+            plot_placeholder.pyplot(fig)
+            time.sleep(0.025)
+
+            plt.close(fig)
+    if true_sol is not None:
+        y_true = true_sol(x_train.detach().numpy())
+        y_pred = y_trial(x_train).detach().numpy()
+        mse = ((y_true - y_pred)**2).mean()
+        st.write(f"MSE for PINN solution: {mse:.8f}")

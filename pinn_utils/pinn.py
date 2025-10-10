@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import List, Callable, Union, Optional
+import copy
 
 def factorials_up_to_n(n :int) -> torch.Tensor:
     """
@@ -126,7 +127,9 @@ def solve(F: Callable,
           batch_size: int = None,
           print_every: int = 500,
           val_size: Union[float, int] = 0.2,
-          early_stopping: Optional[dict] = None
+          early_stopping: Optional[dict] = None,
+          return_checkpoints: bool = False,
+          checkpoint_every: int = 20
           ):
     loss_fn = get_loss(a, ics, NN, F)
     n_points = x.shape[0]
@@ -145,8 +148,7 @@ def solve(F: Callable,
     perm = torch.randperm(n_points)
     x_val = x[perm[:val_size]].requires_grad_(True)
     x_train = x[perm[val_size:]].requires_grad_(True)
-
-
+    checkpoints = []
     n_train = x_train.shape[0]
     if early_stopping is not None:
         min_epochs = early_stopping.get('min_epochs', 20)
@@ -193,13 +195,26 @@ def solve(F: Callable,
         NN.train()
         if epoch % print_every == 0:
             print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
+        if return_checkpoints and epoch % checkpoint_every == 0:
+            checkpoint_state = {k: v.clone() for k, v in NN.state_dict().items()}
+            # create a function that uses a fresh NN with these weights
+            def y_trial(x, state=checkpoint_state):
+                # make a fresh NN instance
+                nn_copy = copy.deepcopy(NN)       # or create a new PINN instance
+                nn_copy.load_state_dict(state)
+                nn_copy.eval()
+                with torch.no_grad():
+                    return get_y_trial(a, ics, nn_copy)(x)
+            checkpoints.append((epoch, y_trial))
+
     print(f"Final Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
     NN.eval()
     y_trial_grad = get_y_trial(a, ics, NN)
-
     def y_trial(x):
         with torch.no_grad():
             return y_trial_grad(x)
+    if return_checkpoints:
+        return y_trial, checkpoints
     return y_trial
 
 
