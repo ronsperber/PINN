@@ -25,7 +25,14 @@ with st.sidebar:
     lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
     num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
     layer_width = st.number_input("Layer width", value=64, step=1)
-
+    activation_options = st.selectbox("Activation function", ["Softplus", "Tanh", "ReLU", "Swish"], index=0)
+    activation_dict = {
+        "Softplus": torch.nn.Softplus(),
+        "Tanh": torch.nn.Tanh(),
+        "ReLU": torch.nn.ReLU(),
+        "Swish": lambda x: x * torch.sigmoid(x)
+    }
+activation = activation_dict[activation_options]
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 current_params = dict(ode_choice=ode_choice, x0=float(x0), y0=float(y0), x_start=float(x_start), x_end=float(x_end), n_points=int(n_points), epochs=int(epochs), lr=float(lr), num_hidden_layers=int(num_hidden_layers), layer_width=int(layer_width))
 if 'last_params' not in st.session_state:
@@ -66,9 +73,22 @@ if solve_clicked:
         F = lambda x, y, dy: dy - (y**2 - x)
         true_sol = None
 
-    NN = pinn.PINN(num_hidden_layers=num_hidden_layers, layer_width=layer_width)
+    NN = pinn.PINN(
+        num_hidden_layers=num_hidden_layers,
+        layer_width=layer_width,
+        input_activation=activation,
+        hidden_activation=activation
+        )
     with st.spinner("Solving..."):
-        y_trial, checkpoints = pinn.solve(F, x0, [y0], NN, x_train, epochs=epochs, val_size=0.1, lr=lr, return_checkpoints=True)
+        y_trial, checkpoints = pinn.solve(F,
+                                          x0,
+                                          [y0],
+                                          NN,
+                                          x_train,
+                                          epochs=epochs,
+                                          val_size=0.1, 
+                                          lr=lr,
+                                          return_checkpoints=True)
 
         # Build frames (prediction, optional true) and store in session_state
         x_np = x_train.detach().numpy()
@@ -110,9 +130,18 @@ if 'frames' in st.session_state:
     plotly_frames = []
     for i, fr in enumerate(frames):
         data = [go.Scatter(x=x, y=fr['y_pred'].flatten())]
+        annotations = []
         if fr['y_true'] is not None:
             data.append(go.Scatter(x=x, y=fr['y_true'].flatten()))
-        plotly_frames.append(go.Frame(data=data, name=str(i), layout=go.Layout(title=fr['title'])))
+            mse = np.mean((fr['y_pred'].flatten() - fr['y_true'].flatten())**2)
+            annotations.append(dict(
+                xref='paper', yref='paper', x=0.95, y=0.95,  # top-right corner
+                text=f"MSE: {mse:.6f}",
+                showarrow=False,
+                font=dict(size=12, color="black")
+            ))
+
+        plotly_frames.append(go.Frame(data=data, name=str(i), layout=go.Layout(title=fr['title'], annotations=annotations)))
 
     duration_ms = max(1, int(0.2 * 1000))
     # Use epoch labels on the slider steps (show 'Epoch N' or 'Final')

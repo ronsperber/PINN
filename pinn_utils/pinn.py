@@ -49,7 +49,8 @@ class PINN(nn.Module):
     def __init__(self,
                  num_hidden_layers:int = 2,
                  layer_width:int = 64,
-                 activation: Callable[[torch.Tensor], torch.Tensor] = nn.Tanh(),
+                 input_activation: Callable[[torch.Tensor], torch.tensor] = nn.Tanh(),
+                 hidden_activation: Union[Callable[[torch.Tensor], torch.Tensor], List]= nn.Tanh(),
                  output_activation: Callable[[torch.Tensor], torch.Tensor] = nn.Identity(),
                  num_inputs:int = 1,
                  num_outputs:int = 1
@@ -71,7 +72,10 @@ class PINN(nn.Module):
             number of equations in a system of DEs
         """
         super(PINN, self).__init__()
-        self.activation = activation
+        if not isinstance (hidden_activation, list):
+            hidden_activation = [hidden_activation] * num_hidden_layers
+        self.input_activation = input_activation
+        self.hidden_activation = hidden_activation
         self.input_layer = nn.Linear(num_inputs, layer_width)
         self.output_layer = nn.Linear(layer_width, num_outputs)
         self.hidden_layers = nn.ModuleList(
@@ -81,9 +85,9 @@ class PINN(nn.Module):
         
 
     def forward(self, x:torch.Tensor) -> torch.Tensor:
-        x = self.activation(self.input_layer(x))
-        for layer in self.hidden_layers:
-            x = self.activation(layer(x))
+        x = self.input_activation(self.input_layer(x))
+        for i,layer in enumerate(self.hidden_layers):
+            x = self.hidden_activation[i](layer(x))
         x = self.output_layer(x)
         return self.output_activation(x)
 
