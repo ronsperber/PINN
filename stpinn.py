@@ -20,12 +20,14 @@ with st.sidebar:
     y0 = st.number_input("y(x0)", value=1.0)
     x_start = st.number_input("x start", value=0.0)
     x_end = st.number_input("x end", value=1.0)
-    n_points = st.number_input("Number of points", value=100, step=10)
-    epochs = st.number_input("Epochs", value=500, step=100)
-    lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
-    num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
-    layer_width = st.number_input("Layer width", value=64, step=1)
-    activation_options = st.selectbox("Activation function", ["Softplus", "Tanh", "ReLU", "Swish"], index=0)
+    with st.expander("Neural Network Parameters", expanded=False):
+        st.caption("Tweak only if the solver struggles or you want to experiment.")
+        n_points = st.number_input("Number of points in interval", value=100, step=10)
+        epochs = st.number_input("Epochs", value=500, step=100)
+        lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
+        num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
+        layer_width = st.number_input("Layer width", value=64, step=1)
+        activation_options = st.selectbox("Activation function", ["Softplus", "Tanh", "ReLU", "Swish"], index=0)
     activation_dict = {
         "Softplus": torch.nn.Softplus(),
         "Tanh": torch.nn.Tanh(),
