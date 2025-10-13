@@ -32,8 +32,11 @@ with st.sidebar:
         "y'' + by' + cy = 0":2,
         "x\u00B2 y'' + b x y' + c y = 0":2
     }
-
-    x0 = st.number_input("x0", value=0.0)
+    
+    if ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
+        x0 = st.number_input("x0 (must be > 0)", min_value=1e-6, value=1.0, key="x0_pos")
+    else:
+        x0 = st.number_input("x0", value=0.0, key="x0_any")
     y0 = st.number_input("y(x0)", value=1.0)
     if ode_orders[ode_choice] == 2:
         yprime0 = st.sidebar.number_input("y'(x0)", value=0.0)
@@ -42,8 +45,12 @@ with st.sidebar:
     if ode_choice in ("y'' + by' + cy = 0", "x\u00B2 y'' + b x y' + c y = 0") :
         b = st.sidebar.number_input("b", value=2.0)
         c = st.sidebar.number_input("c", value=1.0)
-    x_start = st.number_input("x start", value=0.0)
-    x_end = st.number_input("x end", value=1.0)
+    if ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
+        x_start = st.number_input("x start (must be > 0)", min_value= min(x0, 1e-6), value=x0, key="x_start_positive")
+        x_end = st.number_input("x end", min_value = x_start , value=x_start + 5.0, key ="x_end_pos")
+    else:
+        x_start = st.number_input("x start", value=x0, min_value = x0 - 1.0, key="x_start_default")
+        x_end = st.number_input("x end", value=x_start + 2.0, min_value = x_start, key="x_end_default")
     with st.expander("Neural Network Parameters", expanded=False):
         st.caption("Tweak only if the solver struggles or you want to experiment.")
         n_points = st.number_input("Number of points in interval", value=100, step=10)
@@ -70,6 +77,41 @@ elif st.session_state['last_params'] != current_params:
     st.session_state.pop('png_bytes', None)
     st.session_state.pop('gif_bytes', None)
     st.session_state['last_params'] = current_params
+
+import numpy as np
+
+def cauchy_euler_true_sol(x0, y0, yprime0, b, c):
+    # Characteristic equation: r^2 + (b-1) r + c = 0
+    coeffs = [1, b-1, c]
+    r1, r2 = np.roots(coeffs)
+
+    if np.iscomplex(r1):  # complex roots
+        alpha = r1.real
+        beta = abs(r1.imag)
+        cosb = np.cos(beta * np.log(x0))
+        sinb = np.sin(beta * np.log(x0))
+        A = np.array([
+            [cosb, sinb],
+            [(alpha * cosb - beta * sinb), (alpha * sinb + beta * cosb)]
+        ])
+        Y = np.array([y0 / x0**alpha, yprime0 / x0**(alpha-1)])
+        C1, C2 = np.linalg.solve(A, Y)
+        return lambda x: x**alpha * (C1 * np.cos(beta * np.log(x)) + C2 * np.sin(beta * np.log(x)))
+
+    elif r1 == r2:  # repeated root
+        r = r1
+        A = np.array([
+            [x0**r, x0**r * np.log(x0)],
+            [r * x0**(r-1), r * x0**(r-1) * np.log(x0) + x0**(r-1)]
+        ])
+        Y = np.array([y0, yprime0])
+        C1, C2 = np.linalg.solve(A, Y)
+        return lambda x: C1 * x**r + C2 * x**r * np.log(x)
+
+    else:  # distinct real roots
+        C1 = (yprime0 - r2 * y0 / x0) / (r1 - r2)
+        C2 = y0 - C1
+        return lambda x: C1 * x**r1 + C2 * x**r2
 
 
 col1, col2 = st.columns([1,1])
@@ -121,25 +163,7 @@ if solve_clicked:
     elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
         F = lambda x, y, dy, ddy: x**2 * ddy + b * x * dy + c * y
         # Characteristic equation: r^2 + (b-1) r + c = 0
-        discriminant = (b - 1)**2 - 4 * c
-        if discriminant > 0:
-            # Distinct real roots
-            r1 = (1 - b + np.sqrt(discriminant)) / 2
-            r2 = (1 - b - np.sqrt(discriminant)) / 2
-            A = (yprime0 - r2 * y0 / x0) / ((r1 - r2) / x0)  # solve for constants
-            B = y0 - A
-            true_sol = lambda x: A * x**r1 + B * x**r2
-        elif discriminant == 0:
-            # Repeated root
-            r = (1 - b) / 2
-            true_sol = lambda x: x**r * (y0 + yprime0 * np.log(x / x0))
-        else:
-            # Complex roots
-            alpha = (1 - b) / 2
-            beta = np.sqrt(-discriminant) / 2
-            C1 = y0
-            C2 = (yprime0 - alpha * y0 / x0) / (beta / x0)
-            true_sol = lambda x: (x**alpha) * (C1 * np.cos(beta * np.log(x / x0)) + C2 * np.sin(beta * np.log(x / x0)))
+        true_sol = cauchy_euler_true_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)
 
 
     NN = pinn.PINN(
