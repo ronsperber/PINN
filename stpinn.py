@@ -15,9 +15,14 @@ st.title("PINN ODE Solver")
 
 with st.sidebar:
     st.header("Settings")
-    ode_choice = st.selectbox("Choose ODE", ["y' = y", "y' = -y", "y' = y^2 - x"])
+    ode_choice = st.selectbox("Choose ODE", ["y' = y", "y' = -y", "y' = y (1 - y)" ,"y'' + 2y' + y = 0"])
+    ode_orders = {"y' = y":1, "y' = -y":1, "y' = y (1 - y)":1, "y'' + 2y' + y = 0":2}
     x0 = st.number_input("x0", value=0.0)
     y0 = st.number_input("y(x0)", value=1.0)
+    if ode_orders[ode_choice] == 2:
+        yprime0 = st.sidebar.number_input("y'(x0)", value=0.0)
+    else:
+        yprime0 = None
     x_start = st.number_input("x start", value=0.0)
     x_end = st.number_input("x end", value=1.0)
     with st.expander("Neural Network Parameters", expanded=False):
@@ -67,13 +72,20 @@ if solve_clicked:
     # Map choice to function
     if ode_choice == "y' = y":
         F = lambda x, y, dy: dy - y
-        true_sol = lambda x: y0 / np.exp(x0) * np.exp(x)
+        true_sol = lambda x: y0 * np.exp(x - x0) #exponential growth
     elif ode_choice == "y' = -y":
         F = lambda x, y, dy: dy + y
-        true_sol = lambda x: y0 / np.exp(-x0) * np.exp(-x)
-    else:
-        F = lambda x, y, dy: dy - (y**2 - x)
-        true_sol = None
+        true_sol = lambda x: y0 * np.exp(-(x - x0)) #exponential decay
+    elif ode_choice == "y' = y (1 - y)":
+        F = lambda x, y, dy: dy - y * (1 - y)
+        if y0 in (0,1):
+            true_sol = lambda x: y0 * np.ones_like(x) # constant solution
+        else:
+            true_sol = lambda x: 1 / (1 + ((1 - y0) / y0) * np.exp(- (x - x0)))  # logistic solution
+    elif ode_choice == "y'' + 2y' + y = 0":
+        F = lambda x, y, dy, ddy: ddy + 2*dy + y
+        true_sol = lambda x: np.exp(-(x - x0)) * (y0 + (yprime0 + y0)*(x - x0))  # critically damped solution
+
 
     NN = pinn.PINN(
         num_hidden_layers=num_hidden_layers,
@@ -81,10 +93,14 @@ if solve_clicked:
         input_activation=activation,
         hidden_activation=activation
         )
+    if ode_orders[ode_choice] == 1:
+        ics = [y0]
+    else:
+        ics = [y0, yprime0]
     with st.spinner("Solving..."):
         y_trial, checkpoints = pinn.solve(F,
                                           x0,
-                                          [y0],
+                                          ics,
                                           NN,
                                           x_train,
                                           epochs=epochs,

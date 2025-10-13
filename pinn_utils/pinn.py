@@ -22,25 +22,29 @@ def taylor_polynomial(a: float, ics: List[float]):
     """
     n = len(ics)
     facs = factorials_up_to_n(n)
-
+    first_ic = ics[0]
+    n_vars = 1 if isinstance(first_ic, (int, float)) else len(first_ic)
     def g(x):
-        result = torch.zeros_like(x)
+        # make x at least 1D for broadcasting
+        x = x.unsqueeze(-1) if x.ndim == 1 else x  # shape [batch,1] if batched
+        result = torch.zeros(x.shape[0], n_vars, dtype=torch.float32)  # shape [batch, n_vars]
         for k, yk in enumerate(ics):
-            result += yk / facs[k] * (x - a)**k
-        return result
+            yk_tensor = yk.clone().detach().float() if isinstance(yk, torch.Tensor) else torch.tensor(yk, dtype=torch.float32)
+            result += (x - a)**k * (yk_tensor / facs[k])  # broadcasts over batch
+        return result.squeeze(0) if result.shape[0] == 1 else result  # handle scalar x
     return g
 
-def get_y_trial(a: float, ics: List[float], NN: nn.Module):
-    """
-    get a function y_trial that isolates NN(x)
-    from the initial conditions
-    """
+def get_y_trial(a: float, ics: list, NN: nn.Module):
     n = len(ics)
     poly = taylor_polynomial(a, ics)
+    
     def y_trial(x):
-        return poly(x) + (x-a)**n * NN(x)
+        # make x 2D: [batch, 1] for NN
+        x_in = x.unsqueeze(-1) if x.ndim == 1 else x
+        return poly(x_in) + (x_in - a)**n * NN(x_in)
     
     return y_trial
+
 
 class PINN(nn.Module):
     """
