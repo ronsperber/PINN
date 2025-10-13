@@ -15,17 +15,33 @@ st.title("PINN ODE Solver")
 
 with st.sidebar:
     st.header("Settings")
-    ode_choice = st.selectbox("Choose ODE", ["y' = y", "y' = -y", "y' = y (1 - y)" ,"y'' + by' + cy = 0"])
-    ode_orders = {"y' = y":1, "y' = -y":1, "y' = y (1 - y)":1, "y'' + by' + cy = 0":2}
+    ode_choice = st.selectbox(
+        "Choose ODE",
+        [
+            "y' = y",
+            "y' = -y",
+            "y' = y (1 - y)",
+            "y'' + by' + cy = 0",
+            "x\u00B2 y'' + b x y' + c y = 0"
+        ]
+    )
+    ode_orders = {
+        "y' = y":1, 
+        "y' = -y":1, 
+        "y' = y (1 - y)":1, 
+        "y'' + by' + cy = 0":2,
+        "x\u00B2 y'' + b x y' + c y = 0":2
+    }
+
     x0 = st.number_input("x0", value=0.0)
     y0 = st.number_input("y(x0)", value=1.0)
     if ode_orders[ode_choice] == 2:
         yprime0 = st.sidebar.number_input("y'(x0)", value=0.0)
     else:
         yprime0 = None
-    if ode_choice == "y'' + by' + cy = 0":
-        b = st.sidebar.number_input("b (damping coeff)", value=2.0)
-        c = st.sidebar.number_input("c (spring coeff)", value=1.0)
+    if ode_choice in ("y'' + by' + cy = 0", "x\u00B2 y'' + b x y' + c y = 0") :
+        b = st.sidebar.number_input("b", value=2.0)
+        c = st.sidebar.number_input("c", value=1.0)
     x_start = st.number_input("x start", value=0.0)
     x_end = st.number_input("x end", value=1.0)
     with st.expander("Neural Network Parameters", expanded=False):
@@ -102,6 +118,28 @@ if solve_clicked:
             C1 = y0
             C2 = (yprime0 - alpha * y0) / beta
             true_sol = lambda x: np.exp(alpha * (x - x0)) * (C1 * np.cos(beta*(x - x0)) + C2 * np.sin(beta*(x - x0)))
+    elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
+        F = lambda x, y, dy, ddy: x**2 * ddy + b * x * dy + c * y
+        # Characteristic equation: r^2 + (b-1) r + c = 0
+        discriminant = (b - 1)**2 - 4 * c
+        if discriminant > 0:
+            # Distinct real roots
+            r1 = (1 - b + np.sqrt(discriminant)) / 2
+            r2 = (1 - b - np.sqrt(discriminant)) / 2
+            A = (yprime0 - r2 * y0 / x0) / ((r1 - r2) / x0)  # solve for constants
+            B = y0 - A
+            true_sol = lambda x: A * x**r1 + B * x**r2
+        elif discriminant == 0:
+            # Repeated root
+            r = (1 - b) / 2
+            true_sol = lambda x: x**r * (y0 + yprime0 * np.log(x / x0))
+        else:
+            # Complex roots
+            alpha = (1 - b) / 2
+            beta = np.sqrt(-discriminant) / 2
+            C1 = y0
+            C2 = (yprime0 - alpha * y0 / x0) / (beta / x0)
+            true_sol = lambda x: (x**alpha) * (C1 * np.cos(beta * np.log(x / x0)) + C2 * np.sin(beta * np.log(x / x0)))
 
 
     NN = pinn.PINN(
@@ -137,9 +175,14 @@ if solve_clicked:
             else:
                 if ode_choice == "y'' + by' + cy = 0":
                     ode = f"y'' + {b}y' + {c}y = 0"
+                elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
+                    ode = f"x\u00B2 y'' + {b} x y' + {c} y = 0"
                 else:
                     ode = ode_choice
-                title = f"Final Solution to {ode}, y({x0}) = {y0}"
+                if ode_orders[ode_choice] == 1:
+                    title = f"Final Solution to {ode}, y({x0}) = {y0}"
+                else:
+                    title = f"Final Solution to {ode}, y({x0}) = {y0}, y'({x0}) = {yprime0}"
                 epoch_val = "final"
             frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val})
 
