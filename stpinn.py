@@ -3,13 +3,10 @@ import importlib
 import torch
 import numpy as np
 from pinn_utils import pinn
+from pinn_utils.de_sols import cauchy_euler_sol, exp_sol, logistic_sol, linear_homogeneous_sol
 import plotly.graph_objects as go
 import time
 importlib.reload(pinn)
-
-
-
-
 
 st.title("PINN ODE Solver")
 
@@ -18,21 +15,20 @@ with st.sidebar:
     ode_choice = st.selectbox(
         "Choose ODE",
         [
-            "y' = y",
-            "y' = -y",
-            "y' = y (1 - y)",
+            "y' = k y",
+            "y' = k y (1 - y)",
             "y'' + by' + cy = 0",
             "x\u00B2 y'' + b x y' + c y = 0"
         ]
     )
     ode_orders = {
-        "y' = y":1, 
-        "y' = -y":1, 
-        "y' = y (1 - y)":1, 
+        "y' = k y":1, 
+        "y' = k y (1 - y)":1, 
         "y'' + by' + cy = 0":2,
         "x\u00B2 y'' + b x y' + c y = 0":2
     }
-    
+    if ode_choice in ["y' = k y", "y' = k y (1 - y)"]:
+        k = st.number_input("k", value=1.0)
     if ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
         x0 = st.number_input("x0 (must be > 0)", min_value=1e-6, value=1.0, key="x0_pos")
     else:
@@ -66,6 +62,14 @@ with st.sidebar:
         "Swish": lambda x: x * torch.sigmoid(x)
     }
 activation = activation_dict[activation_options]
+if ode_choice == "y' = k y":
+    ode = f"dy/dx = {k} y"
+elif ode_choice == "y' = k y (1 - y)":
+    ode = f"dy/dx = {k} y (1 - y)"
+elif ode_choice == "y'' + by' + cy = 0":
+    ode = f"d²y/dx² + {b} dy/dx + {c} y = 0"
+elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
+    ode = f"x² d²y/dx² + {b} x dy/dx + {c} y = 0"
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 current_params = dict(ode_choice=ode_choice, x0=float(x0), y0=float(y0), x_start=float(x_start), x_end=float(x_end), n_points=int(n_points), epochs=int(epochs), lr=float(lr), num_hidden_layers=int(num_hidden_layers), layer_width=int(layer_width))
 if 'last_params' not in st.session_state:
@@ -80,38 +84,6 @@ elif st.session_state['last_params'] != current_params:
 
 import numpy as np
 
-def cauchy_euler_true_sol(x0, y0, yprime0, b, c):
-    # Characteristic equation: r^2 + (b-1) r + c = 0
-    coeffs = [1, b-1, c]
-    r1, r2 = np.roots(coeffs)
-
-    if np.iscomplex(r1):  # complex roots
-        alpha = r1.real
-        beta = abs(r1.imag)
-        cosb = np.cos(beta * np.log(x0))
-        sinb = np.sin(beta * np.log(x0))
-        A = np.array([
-            [cosb, sinb],
-            [(alpha * cosb - beta * sinb), (alpha * sinb + beta * cosb)]
-        ])
-        Y = np.array([y0 / x0**alpha, yprime0 / x0**(alpha-1)])
-        C1, C2 = np.linalg.solve(A, Y)
-        return lambda x: x**alpha * (C1 * np.cos(beta * np.log(x)) + C2 * np.sin(beta * np.log(x)))
-
-    elif r1 == r2:  # repeated root
-        r = r1
-        A = np.array([
-            [x0**r, x0**r * np.log(x0)],
-            [r * x0**(r-1), r * x0**(r-1) * np.log(x0) + x0**(r-1)]
-        ])
-        Y = np.array([y0, yprime0])
-        C1, C2 = np.linalg.solve(A, Y)
-        return lambda x: C1 * x**r + C2 * x**r * np.log(x)
-
-    else:  # distinct real roots
-        C1 = (yprime0 - r2 * y0 / x0) / (r1 - r2)
-        C2 = y0 - C1
-        return lambda x: C1 * x**r1 + C2 * x**r2
 
 
 col1, col2 = st.columns([1,1])
@@ -131,39 +103,22 @@ if solve_clicked:
     x_train = torch.linspace(x_start, x_end, n_points).reshape(-1, 1).requires_grad_(True)
 
     # Map choice to function
-    if ode_choice == "y' = y":
-        F = lambda x, y, dy: dy - y
-        true_sol = lambda x: y0 * np.exp(x - x0) #exponential growth
-    elif ode_choice == "y' = -y":
-        F = lambda x, y, dy: dy + y
-        true_sol = lambda x: y0 * np.exp(-(x - x0)) #exponential decay
-    elif ode_choice == "y' = y (1 - y)":
-        F = lambda x, y, dy: dy - y * (1 - y)
+    if ode_choice == "y' = k y":
+        F = lambda x, y, dy: dy - k * y
+        true_sol = exp_sol(k=k, x0=x0, y0=y0)  # exponential growth
+    elif ode_choice == "y' = k y (1 - y)":
+        F = lambda x, y, dy: dy - k *y * (1 - y)
         if y0 in (0,1):
             true_sol = lambda x: y0 * np.ones_like(x) # constant solution
         else:
-            true_sol = lambda x: 1 / (1 + ((1 - y0) / y0) * np.exp(- (x - x0)))  # logistic solution
+            true_sol = logistic_sol(k=k, x0=x0, y0=y0)  # logistic solution
     elif ode_choice == "y'' + by' + cy = 0":
         F = lambda x, y, dy, ddy: ddy + b * dy +  c * y
-        if b ** 2 - 4 * c == 0:
-            true_sol = lambda x: np.exp(-(x - x0)) * (y0 + (yprime0 + y0)*(x - x0))  # critically damped solution
-        elif b ** 2 - 4 * c > 0:
-            r1 = (-b + np.sqrt(b**2 - 4*c)) / 2
-            r2 = (-b - np.sqrt(b**2 - 4*c)) / 2
-            A = (yprime0 - r2 * y0) / (r1 - r2)
-            B = y0 - A
-            true_sol = lambda x: A * np.exp(r1 * (x - x0)) + B * np.exp(r2 * (x - x0))  # overdamped solution
-        else:
-            # Underdamped
-            alpha = -b / 2
-            beta = np.sqrt(4*c - b**2) / 2
-            C1 = y0
-            C2 = (yprime0 - alpha * y0) / beta
-            true_sol = lambda x: np.exp(alpha * (x - x0)) * (C1 * np.cos(beta*(x - x0)) + C2 * np.sin(beta*(x - x0)))
+        true_sol = linear_homogeneous_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)
     elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
         F = lambda x, y, dy, ddy: x**2 * ddy + b * x * dy + c * y
         # Characteristic equation: r^2 + (b-1) r + c = 0
-        true_sol = cauchy_euler_true_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)
+        true_sol = cauchy_euler_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)
 
 
     NN = pinn.PINN(
@@ -197,12 +152,6 @@ if solve_clicked:
                 title = f"Solution to {ode_choice}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
                 epoch_val = int(checkpoint[0])
             else:
-                if ode_choice == "y'' + by' + cy = 0":
-                    ode = f"y'' + {b}y' + {c}y = 0"
-                elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
-                    ode = f"x\u00B2 y'' + {b} x y' + {c} y = 0"
-                else:
-                    ode = ode_choice
                 if ode_orders[ode_choice] == 1:
                     title = f"Final Solution to {ode}, y({x0}) = {y0}"
                 else:
