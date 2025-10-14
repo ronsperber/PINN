@@ -92,3 +92,68 @@ def linear_homogeneous_sol(b: float, c: float, x0: float, y0: float, yprime0: fl
         Y = np.array([y0, yprime0])
         C1, C2 = np.linalg.solve(A, Y)
         return lambda x: np.exp(alpha * (x - x0)) * (C1 * np.cos(beta * (x - x0)) + C2 * np.sin(beta * (x - x0)))
+    
+    # -----------------------
+# 1st Order Linear Non-homogeneous
+# -----------------------
+def linear_nonhomogeneous_sol(k: float, x0: float, y0: float) -> Callable:
+    C = (y0 + (k * np.sin(x0) + np.cos(x0)) / (1 + k**2)) * np.exp(-k * x0)
+
+    def y_analytic(x: np.ndarray) -> np.ndarray:
+        return C * np.exp(k * x) - (k * np.sin(x) + np.cos(x)) / (1 + k**2)
+
+    return y_analytic
+
+
+
+
+# -----------------------
+# 1st Order Non-linear
+# -----------------------
+def bernoulli_sol(k: float, x0: float, y0: float) -> Callable:
+    """
+    Solves y' = k*y^2 (Bernoulli type)
+    y(x0) = y0
+    """
+    C = 1/y0 + k*x0
+    def y_analytic(x: np.ndarray) -> np.ndarray:
+        return 1 / (C - k*x)
+    return y_analytic
+
+# -----------------------
+# 2nd Order Linear Non-homogeneous
+# -----------------------
+def linear_2nd_nonhomogeneous_sol(x0: float, y0: float, yprime0: float) -> Callable:
+    """
+    Solves y'' - y = e^x
+    y(x0) = y0
+    y'(x0) = yprime0
+    """
+    # General solution: y = C1 e^x + C2 e^-x + (x/2) e^x
+    # Solve for C1, C2 using initial conditions
+    A = np.array([[np.exp(x0), np.exp(-x0)], 
+                  [np.exp(x0) + x0/2 * np.exp(x0), -np.exp(-x0) + x0/2 * np.exp(x0)]])
+    Y = np.array([y0 - x0/2*np.exp(x0), yprime0 - (x0/2 + 1/2)*np.exp(x0)])
+    C1, C2 = np.linalg.solve(A, Y)
+    def y_analytic(x: np.ndarray) -> np.ndarray:
+        return C1 * np.exp(x) + C2 * np.exp(-x) + (x/2) * np.exp(x)
+    return y_analytic
+
+# -----------------------
+# 2nd Order Non-linear (simple solvable)
+# -----------------------
+def nonlinear_2nd_example(k: float, x0: float, y0: float, yprime0: float) -> Callable:
+    """
+    Analytic solution for y'' = k*(y')^2
+    y(x0) = y0, y'(x0) = yprime0
+    """
+    # First constant from integrating y'' = k*(y')^2
+    C1 = -1 / yprime0 - k * x0
+    
+    # Second constant from initial y
+    C2 = y0 + (1 / k) * np.log(np.abs(k * x0 + C1))
+    
+    def y_analytic(x: np.ndarray) -> np.ndarray:
+        return - (1 / k) * np.log(np.abs(k * x + C1)) + C2
+    
+    return y_analytic
