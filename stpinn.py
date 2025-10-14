@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from pinn_utils import pinn
 from pinn_utils.de_sols import (
+    bernoulli_sol,
     cauchy_euler_sol, 
     exp_sol, 
     logistic_sol, 
@@ -24,6 +25,7 @@ with st.sidebar:
             "y' = k y",
             "y' = k y (1 - y)",
             "y' = k y + sin(x)",
+            "y' = k y\u00B2",
             "y'' + by' + cy = 0",
             "x\u00B2 y'' + b x y' + c y = 0"
         ]
@@ -32,10 +34,11 @@ with st.sidebar:
         "y' = k y":1, 
         "y' = k y (1 - y)":1, 
         "y' = k y + sin(x)":1,
+        "y' = k y\u00B2":1,
         "y'' + by' + cy = 0":2,
         "x\u00B2 y'' + b x y' + c y = 0":2
     }
-    if ode_choice in ["y' = k y", "y' = k y (1 - y)", "y' = k y + sin(x)"]:
+    if ode_choice in ["y' = k y", "y' = k y (1 - y)", "y' = k y + sin(x)", "y' = k y\u00B2"]:
         k = st.number_input("k", value=1.0)
     if ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
         x0 = st.number_input("x0 (must be > 0)", min_value=1e-6, value=1.0, key="x0_pos")
@@ -53,7 +56,7 @@ with st.sidebar:
         x_start = st.number_input("x start (must be > 0)", min_value= min(x0, 1e-6), value=x0, key="x_start_positive")
         x_end = st.number_input("x end", min_value = x_start , value=x_start + 5.0, key ="x_end_pos")
     else:
-        x_start = st.number_input("x start", value=x0, min_value = x0 - 1.0, key="x_start_default")
+        x_start = st.number_input("x start", value=x0, min_value = x0 - 5.0, key="x_start_default")
         x_end = st.number_input("x end", value=x_start + 2.0, min_value = x_start, key="x_end_default")
     with st.expander("Neural Network Parameters", expanded=False):
         st.caption("Tweak only if the solver struggles or you want to experiment.")
@@ -76,6 +79,8 @@ elif ode_choice == "y' = k y (1 - y)":
     ode = f"dy/dx = {k} y (1 - y)"
 elif ode_choice == "y' = k y + sin(x)":
     ode = f"dy/dx = {k} y + sin(x)"
+elif ode_choice == "y' = k y\u00B2":
+    ode = f"dy/dx = {k} y²"
 elif ode_choice == "y'' + by' + cy = 0":
     ode = f"d²y/dx² + {b} dy/dx + {c} y = 0"
 elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
@@ -125,6 +130,9 @@ if solve_clicked:
     elif ode_choice == "y' = k y + sin(x)":
         F = lambda x, y, dy: dy - k * y - torch.sin(x)
         true_sol = linear_nonhomogeneous_sol(k=k, x0=x0, y0=y0)  
+    elif ode_choice == "y' = k y\u00B2":
+        F = lambda x, y, dy: dy - k * y**2
+        true_sol = bernoulli_sol(k=k, x0=x0, y0=y0)
     elif ode_choice == "y'' + by' + cy = 0":
         F = lambda x, y, dy, ddy: ddy + b * dy +  c * y
         true_sol = linear_homogeneous_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)

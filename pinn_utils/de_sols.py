@@ -97,6 +97,10 @@ def linear_homogeneous_sol(b: float, c: float, x0: float, y0: float, yprime0: fl
 # 1st Order Linear Non-homogeneous
 # -----------------------
 def linear_nonhomogeneous_sol(k: float, x0: float, y0: float) -> Callable:
+    """
+    Solves y' = k*y + sin(x)
+    y(x0) = y0
+    """
     C = (y0 + (k * np.sin(x0) + np.cos(x0)) / (1 + k**2)) * np.exp(-k * x0)
 
     def y_analytic(x: np.ndarray) -> np.ndarray:
@@ -115,9 +119,13 @@ def bernoulli_sol(k: float, x0: float, y0: float) -> Callable:
     Solves y' = k*y^2 (Bernoulli type)
     y(x0) = y0
     """
-    C = 1/y0 + k*x0
-    def y_analytic(x: np.ndarray) -> np.ndarray:
-        return 1 / (C - k*x)
+    if y0 != 0:
+        C = 1/y0 + k*x0
+        def y_analytic(x: np.ndarray) -> np.ndarray:
+            return 1 / (C - k*x)
+    else:
+        def y_analytic(x: np.ndarray) -> np.ndarray:
+            return np.zeros_like(x)
     return y_analytic
 
 # -----------------------
