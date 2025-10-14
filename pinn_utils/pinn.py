@@ -41,7 +41,7 @@ def get_y_trial(a: float, ics: list, NN: nn.Module):
     def y_trial(x):
         # make x 2D: [batch, 1] for NN
         x_in = x.unsqueeze(-1) if x.ndim == 1 else x
-        return poly(x_in) + (x_in - a)**n * NN(x_in)
+        return poly(x_in) + (x_in - a)**n * NN(x_in - a)
     
     return y_trial
 

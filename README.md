@@ -19,7 +19,7 @@ $$
 We then create a neural network that we will refer to as $NN$ and assume our solution has the form:
 
 $$
-y = \sum_{n=0}^{k-1} \frac{y^{(n)}(x_0)(x - x_0)^n}{n!} + (x - x_0)^k  NN(x)
+y = \sum_{n=0}^{k-1} \frac{y^{(n)}(x_0)(x - x_0)^n}{n!} + (x - x_0)^k  NN(x - x_0)
 $$
 
 This is modeling the idea that if the solution is analytic at $x_0$, we can write:
@@ -41,7 +41,7 @@ y = \sum_{n=0}^{k-1} \frac{y^{(n)}(x_0)(x - x_0)^n}{n!} + (x - x_0)^k \sum_{n=k}
 $$
 
 The first half of that sum is the summation in our trial solution. The second half can be thought of as $(x - x_0)^k  F(x)$, where $F$ is some function analytic at $x_0$.  
-So the neural network $NN(x)$ is trying to learn to approximate $F(x)$.
+So the neural network $NN(x)$ is trying to learn to approximate $F(x)$ as a function "centered" at $x_0$.
 
 ---
 
