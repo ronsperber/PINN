@@ -5,96 +5,86 @@ import numpy as np
 from pinn_utils import pinn
 from pinn_utils.de_sols import (
     bernoulli_sol,
-    cauchy_euler_sol, 
-    exp_sol, 
-    logistic_sol, 
+    cauchy_euler_sol,
+    exp_sol,
+    logistic_sol,
     linear_nonhomogeneous_sol,
     linear_homogeneous_sol,
     linear_2nd_nonhomogeneous_sol,
-    nonlinear_2nd_example
+    nonlinear_2nd_example,
 )
 import plotly.graph_objects as go
 import time
+
 importlib.reload(pinn)
+
 
 st.title("PINN ODE Solver")
 
-with st.sidebar:
-    st.header("Settings")
-    ode_choice = st.selectbox(
-        "Choose ODE",
-        [
-            "y' = k y",
-            "y' = k y (1 - y)",
-            "y' = k y + sin(x)",
-            "y' = k y\u00B2",
-            "y'' + by' + cy = 0",
-            "x\u00B2 y'' + b x y' + c y = 0",
-            "y'' - y = eˣ",
-            "y'' = k (y')\u00B2"  
-        ]
-    )
-    ode_orders = {
-        "y' = k y":1, 
-        "y' = k y (1 - y)":1, 
-        "y' = k y + sin(x)":1,
-        "y' = k y\u00B2":1,
-        "y'' + by' + cy = 0":2,
-        "x\u00B2 y'' + b x y' + c y = 0":2,
-        "y'' - y = eˣ":2,
-        "y'' = k (y')\u00B2":2
-    }
-    if ode_choice in ["y' = k y", "y' = k y (1 - y)", "y' = k y + sin(x)", "y' = k y\u00B2", "y'' = k (y')\u00B2"]:
-        k = st.number_input("k", value=1.0)
-    if ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
-        x0 = st.number_input("x0 (must be > 0)", min_value=1e-6, value=1.0, key="x0_pos")
-    else:
-        x0 = st.number_input("x0", value=0.0, key="x0_any")
-    y0 = st.number_input("y(x0)", value=1.0)
-    if ode_orders[ode_choice] == 2:
-        yprime0 = st.sidebar.number_input("y'(x0)", value=0.0)
-    else:
-        yprime0 = None
-    if ode_choice in ("y'' + by' + cy = 0", "x\u00B2 y'' + b x y' + c y = 0") :
-        b = st.sidebar.number_input("b", value=2.0)
-        c = st.sidebar.number_input("c", value=1.0)
-    if ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
-        x_start = st.number_input("x start (must be > 0)", min_value= min(x0, 1e-6), value=x0, key="x_start_positive")
-        x_end = st.number_input("x end", min_value = x_start , value=x_start + 5.0, key ="x_end_pos")
-    else:
-        x_start = st.number_input("x start", value=x0, min_value = x0 - 5.0, key="x_start_default")
-        x_end = st.number_input("x end", value=x_start + 2.0, min_value = x_start, key="x_end_default")
-    with st.expander("Neural Network Parameters", expanded=False):
-        st.caption("Tweak only if the solver struggles or you want to experiment.")
-        n_points = st.number_input("Number of points in interval", value=100, step=10)
-        epochs = st.number_input("Epochs", value=500, step=100)
-        lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
-        num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
-        layer_width = st.number_input("Layer width", value=64, step=1)
-        activation_options = st.selectbox("Activation function", ["Softplus", "Tanh", "ReLU", "Swish"], index=0)
-    activation_dict = {
-        "Softplus": torch.nn.Softplus(),
-        "Tanh": torch.nn.Tanh(),
-        "ReLU": torch.nn.ReLU(),
-        "Swish": lambda x: x * torch.sigmoid(x)
-    }
+# Full ODE metadata mapping for the sidebar and solver logic
+from pinn_utils.ode_meta import ODES
+
+# Sidebar inputs driven by ODES metadata
+ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
+meta = ODES[ode_choice]
+
+# Small tolerance to avoid float-boundary validation edge-cases in Streamlit inputs
+EPS = 1e-9
+
+# Basic ICs and parameters (in sidebar)
+if meta.get('x0_positive'):
+    # enforce positive x0 for ODEs that require it (e.g., Cauchy-Euler)
+    x0 = st.sidebar.number_input("x0", value=1.0, min_value=1e-6)
+else:
+    x0 = st.sidebar.number_input("x0", value=0.0)
+if meta.get('needs_k'):
+    k = st.sidebar.number_input("k", value=1.0)
+else:
+    k = None
+
+y0 = st.sidebar.number_input("y(x0)", value=1.0)
+if meta.get('order', 1) == 2:
+    yprime0 = st.sidebar.number_input("y'(x0)", value=0.0)
+else:
+    yprime0 = None
+
+if meta.get('needs_b_c'):
+    b = st.sidebar.number_input("b", value=2.0)
+    c = st.sidebar.number_input("c", value=1.0)
+else:
+    b = None
+    c = None
+
+if meta.get('x0_positive'):
+    # allow a tiny tolerance so users can type values like 0.50 without floating-point validation errors
+    x_start_min = max(1e-6, x0 - EPS)
+    x_start = st.sidebar.number_input("x start (must be > 0)", min_value=x_start_min, value=x0, key="x_start_positive")
+    x_end = st.sidebar.number_input("x end", min_value=max(x_start - EPS, 1e-6), value=x_start + 5.0, key="x_end_pos")
+else:
+    x_start = st.sidebar.number_input("x start", value=x0, min_value=x0 - 5.0 - EPS, key="x_start_default")
+    x_end = st.sidebar.number_input("x end", value=x_start + 2.0, min_value=x_start - EPS, key="x_end_default")
+
+with st.sidebar.expander("Neural Network Parameters", expanded=False):
+    st.caption("Tweak only if the solver struggles or you want to experiment.")
+    n_points = st.number_input("Number of points in interval", value=100, step=10)
+    epochs = st.number_input("Epochs", value=500, step=100)
+    lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
+    num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
+    layer_width = st.number_input("Layer width", value=64, step=1)
+    activation_options = st.selectbox("Activation function", ["Softplus", "Tanh", "ReLU", "Swish"], index=0)
+
+activation_dict = {
+    "Softplus": torch.nn.Softplus(),
+    "Tanh": torch.nn.Tanh(),
+    "ReLU": torch.nn.ReLU(),
+    "Swish": lambda x: x * torch.sigmoid(x)
+}
+
 activation = activation_dict[activation_options]
-if ode_choice == "y' = k y":
-    ode = f"dy/dx = {k} y"
-elif ode_choice == "y' = k y (1 - y)":
-    ode = f"dy/dx = {k} y (1 - y)"
-elif ode_choice == "y' = k y + sin(x)":
-    ode = f"dy/dx = {k} y + sin(x)"
-elif ode_choice == "y' = k y\u00B2":
-    ode = f"dy/dx = {k} y²"
-elif ode_choice == "y'' + by' + cy = 0":
-    ode = f"d²y/dx² + {b} dy/dx + {c} y = 0"
-elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
-    ode = f"x² d²y/dx² + {b} x dy/dx + {c} y = 0"
-elif ode_choice == "y'' - y = eˣ":
-    ode = "d²y/dx² - y = eˣ"
-elif ode_choice == "y'' = k (y')\u00B2":
-    ode = f"d²y/dx² = {k} (dy/dx)²"
+
+# Build a human-readable ODE string for titles
+ode = meta.get('ode_str', lambda **kw: ode_choice)(k=k, b=b, c=c)
+
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 current_params = dict(ode_choice=ode_choice, x0=float(x0), y0=float(y0), x_start=float(x_start), x_end=float(x_end), n_points=int(n_points), epochs=int(epochs), lr=float(lr), num_hidden_layers=int(num_hidden_layers), layer_width=int(layer_width))
 if 'last_params' not in st.session_state:
@@ -125,82 +115,88 @@ if reset_clicked:
     st.session_state.pop('gif_bytes', None)
 
 if solve_clicked:
-    x_train = torch.linspace(x_start, x_end, n_points).reshape(-1, 1).requires_grad_(True)
-
-    # Map choice to function
-    if ode_choice == "y' = k y":
-        F = lambda x, y, dy: dy - k * y
-        true_sol = exp_sol(k=k, x0=x0, y0=y0)  # exponential growth
-    elif ode_choice == "y' = k y (1 - y)":
-        F = lambda x, y, dy: dy - k *y * (1 - y)
-        if y0 in (0,1):
-            true_sol = lambda x: y0 * np.ones_like(x) # constant solution
-        else:
-            true_sol = logistic_sol(k=k, x0=x0, y0=y0)  # logistic solution
-    elif ode_choice == "y' = k y + sin(x)":
-        F = lambda x, y, dy: dy - k * y - torch.sin(x)
-        true_sol = linear_nonhomogeneous_sol(k=k, x0=x0, y0=y0)  
-    elif ode_choice == "y' = k y\u00B2":
-        F = lambda x, y, dy: dy - k * y**2
-        true_sol = bernoulli_sol(k=k, x0=x0, y0=y0)
-    elif ode_choice == "y'' + by' + cy = 0":
-        F = lambda x, y, dy, ddy: ddy + b * dy +  c * y
-        true_sol = linear_homogeneous_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)
-    elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
-        F = lambda x, y, dy, ddy: x**2 * ddy + b * x * dy + c * y
-        # Characteristic equation: r^2 + (b-1) r + c = 0
-        true_sol = cauchy_euler_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)
-    elif ode_choice == "y'' - y = eˣ":
-        F = lambda x, y, dy, ddy: ddy - y - torch.exp(x)
-        true_sol = linear_2nd_nonhomogeneous_sol(x0=x0, y0=y0, yprime0=yprime0)
-    elif ode_choice == "y'' = k (y')\u00B2":
-        F = lambda x, y, dy, ddy: ddy - k * dy**2
-        true_sol = nonlinear_2nd_example(k=k, x0=x0, y0=y0, yprime0=yprime0)
-
-
-    NN = pinn.PINN(
-        num_hidden_layers=num_hidden_layers,
-        layer_width=layer_width,
-        input_activation=activation,
-        hidden_activation=activation
-        )
-    if ode_orders[ode_choice] == 1:
-        ics = [y0]
+    # Validate positive-domain requirements before running solver
+    if meta.get('x0_positive') and x0 <= 0:
+        st.sidebar.error("This ODE requires x0 > 0. Please set x0 to a positive value.")
+    elif meta.get('x0_positive') and x_start <= 0:
+        st.sidebar.error("This ODE requires the interval start to be > 0. Please set x start to a positive value.")
     else:
-        ics = [y0, yprime0]
-    with st.spinner("Solving..."):
-        y_trial, checkpoints = pinn.solve(F,
-                                          x0,
-                                          ics,
-                                          NN,
-                                          x_train,
-                                          epochs=epochs,
-                                          val_size=0.1, 
-                                          lr=lr,
-                                          return_checkpoints=True)
+        x_train = torch.linspace(x_start, x_end, n_points).reshape(-1, 1).requires_grad_(True)
 
-        # Build frames (prediction, optional true) and store in session_state
-        x_np = x_train.detach().numpy()
-        frames = []
-        for checkpoint in checkpoints + [("final", y_trial)]:
-            y_pred = checkpoint[1](x_train).detach().numpy()
-            y_true = true_sol(x_np) if true_sol is not None else None
-            if isinstance(checkpoint[0], int):
-                title = f"Solution to {ode_choice}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
-                epoch_val = int(checkpoint[0])
+        # Build F and true solution using ODES metadata
+        meta = ODES[ode_choice]
+        # Create the residual function F using the factory. Factories accept k, b, c etc and ignore extras.
+        F = meta['F_factory'](k=k, b=b, c=c)
+        # Build true solution if factory provided
+        true_factory = meta.get('true_factory')
+        if callable(true_factory):
+            true_sol = None
+            true_factory_err = None
+            try:
+                true_sol = true_factory(x0=x0, y0=y0, yprime0=yprime0, k=k, b=b, c=c)
+            except Exception as e:
+                true_factory_err = e
+                try:
+                    true_sol = true_factory(x0=x0, y0=y0)
+                    true_factory_err = None
+                except Exception as e2:
+                    true_factory_err = e2
+                    true_sol = None
+            # Report analytic-solution availability to the sidebar for debugging
+            if true_sol is None:
+                st.sidebar.warning("Analytic true solution unavailable for selected parameters.")
+                if true_factory_err is not None:
+                    st.sidebar.caption(f"True-factory error: {true_factory_err}")
             else:
-                if ode_orders[ode_choice] == 1:
-                    title = f"Final Solution to {ode}, y({x0}) = {y0}"
-                else:
-                    title = f"Final Solution to {ode}, y({x0}) = {y0}, y'({x0}) = {yprime0}"
-                epoch_val = "final"
-            frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val})
+                st.sidebar.success("Analytic true solution built.")
+        else:
+            true_sol = None
 
-    st.session_state['frames'] = frames
-    st.session_state['x_np'] = x_np
-    # clear previous exports when new solution is computed
-    st.session_state.pop('png_bytes', None)
-    st.session_state.pop('gif_bytes', None)
+
+        NN = pinn.PINN(
+            num_hidden_layers=num_hidden_layers,
+            layer_width=layer_width,
+            input_activation=activation,
+            hidden_activation=activation
+            )
+        if meta.get('order', 1) == 1:
+            ics = [y0]
+        else:
+            ics = [y0, yprime0]
+        with st.spinner("Solving..."):
+            y_trial, checkpoints = pinn.solve(F,
+                                              x0,
+                                              ics,
+                                              NN,
+                                              x_train,
+                                              epochs=epochs,
+                                              val_size=0.1, 
+                                              lr=lr,
+                                              return_checkpoints=True)
+
+            # Build frames (prediction, optional true) and store in session_state
+            x_np = x_train.detach().numpy()
+            frames = []
+            for checkpoint in checkpoints + [("final", y_trial)]:
+                y_pred = checkpoint[1](x_train).detach().numpy()
+                # many analytic factories expect a 1-D numpy array; flatten to be safe
+                y_true = true_sol(x_np.flatten()) if true_sol is not None else None
+                if isinstance(checkpoint[0], int):
+                    title = f"Solution to {ode_choice}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
+                    epoch_val = int(checkpoint[0])
+                else:
+                    if meta.get('order', 1) == 1:
+                        title = f"Final Solution to {ode}, y({x0}) = {y0}"
+                    else:
+                        title = f"Final Solution to {ode}, y({x0}) = {y0}, y'({x0}) = {yprime0}"
+                    epoch_val = "final"
+                frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val})
+
+        st.session_state['frames'] = frames
+        st.session_state['x_np'] = x_np
+        # clear previous exports when new solution is computed
+        st.session_state.pop('png_bytes', None)
+        st.session_state.pop('gif_bytes', None)
 
 
 if 'frames' in st.session_state:
