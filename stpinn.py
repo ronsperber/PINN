@@ -168,8 +168,43 @@ if solve_clicked:
             # Build frames (prediction, optional true) and store in session_state
             x_np = x_train.detach().numpy()
             frames = []
+            # helper to reconstruct a NN from checkpoint state (if provided)
+            def _nn_from_checkpoint_fn(ck_fn):
+                state = None
+                try:
+                    defaults = ck_fn.__defaults__
+                    if defaults and len(defaults) > 0:
+                        state = defaults[0]
+                except Exception:
+                    state = None
+                if state is None:
+                    return None
+                # build a fresh NN with same architecture
+                nn_copy = pinn.PINN(num_hidden_layers=num_hidden_layers, layer_width=layer_width, input_activation=activation, hidden_activation=activation)
+                nn_copy.load_state_dict(state)
+                nn_copy.eval()
+                return nn_copy
+
             for checkpoint in checkpoints + [("final", y_trial)]:
-                y_pred = checkpoint[1](x_train).detach().numpy()
+                ck_fn = checkpoint[1]
+                nn_for_eval = _nn_from_checkpoint_fn(ck_fn)
+                if nn_for_eval is None:
+                    # final frame: use the trained NN instance
+                    nn_for_eval = NN
+
+                # build a differentiable trial function from this NN so we can compute derivatives/residual
+                y_fn = pinn.get_y_trial(x0, ics, nn_for_eval)
+                # ensure x_train requires grad for derivative computation
+                x_for_eval = x_train.detach().clone().requires_grad_(True)
+                y_torch = y_fn(x_for_eval)
+                derivs = pinn.derivatives(y_torch, x_for_eval, len(ics))
+                try:
+                    res = F(x_for_eval, *derivs)
+                    pde_loss = float(torch.mean(res**2).item())
+                except Exception as e:
+                    pde_loss = None
+
+                y_pred = y_torch.detach().numpy()
                 # many analytic factories expect a 1-D numpy array; flatten to be safe
                 y_true = true_sol(x_np.flatten()) if true_sol is not None else None
                 if isinstance(checkpoint[0], int):
@@ -181,7 +216,7 @@ if solve_clicked:
                     else:
                         title = f"Final Solution to {ode}, y({x0}) = {y0}, y'({x0}) = {yprime0}"
                     epoch_val = "final"
-                frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val})
+                frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val, "pde_loss": pde_loss})
 
         st.session_state['frames'] = frames
         st.session_state['x_np'] = x_np
@@ -213,12 +248,27 @@ if 'frames' in st.session_state:
         if fr['y_true'] is not None:
             data.append(go.Scatter(x=x, y=fr['y_true'].flatten()))
             mse = np.mean((fr['y_pred'].flatten() - fr['y_true'].flatten())**2)
+            ann_text = f"MSE: {mse:.6f}"
+            # include PDE residual when available
+            pde_val = fr.get('pde_loss')
+            if pde_val is not None:
+                ann_text += f"<br>Residual: {pde_val:.3e}"
             annotations.append(dict(
                 xref='paper', yref='paper', x=0.95, y=0.95,  # top-right corner
-                text=f"MSE: {mse:.6f}",
+                text=ann_text,
                 showarrow=False,
                 font=dict(size=12, color="black")
             ))
+        else:
+            # no true solution; still show residual if available
+            pde_val = fr.get('pde_loss')
+            if pde_val is not None:
+                annotations.append(dict(
+                    xref='paper', yref='paper', x=0.95, y=0.95,
+                    text=f"Residual: {pde_val:.3e}",
+                    showarrow=False,
+                    font=dict(size=12, color="black")
+                ))
 
         plotly_frames.append(go.Frame(data=data, name=str(i), layout=go.Layout(title=fr['title'], annotations=annotations)))
 
@@ -243,6 +293,22 @@ if 'frames' in st.session_state:
     fig.update_layout(updatemenus=updatemenus, sliders=sliders, title=frames[final_idx]['title'])
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # Show PDE residuals (mean squared residual) over frames if available using Plotly
+    # user-controlled toggle to show/hide residuals
+    show_residuals = st.sidebar.checkbox("Show PDE residuals", value=False)
+    pde_losses = [fr.get('pde_loss') for fr in frames]
+    if show_residuals and any(pl is not None for pl in pde_losses):
+        # convert None -> nan for plotting
+        yvals = [pl if pl is not None else float('nan') for pl in pde_losses]
+        res_fig = go.Figure()
+        res_fig.add_trace(go.Scatter(x=list(range(1, len(yvals) + 1)), y=yvals, mode='lines+markers', name='PDE residual'))
+        res_fig.update_layout(title='PDE residual (per-frame)', xaxis_title='Checkpoint', yaxis_title='Mean PDE residual', template='plotly_white')
+        st.plotly_chart(res_fig, use_container_width=True)
+        # show final numeric value if available
+        final_vals = [v for v in pde_losses if v is not None]
+        if final_vals:
+            st.write(f"Final PDE residual (mean): {final_vals[-1]:.6e}")
 
     # Export controls: Prepare and Download flow to avoid transient UI issues
     if 'png_bytes' not in st.session_state:
