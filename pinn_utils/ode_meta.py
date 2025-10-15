@@ -11,6 +11,8 @@ from pinn_utils.de_sols import (
     nonlinear_2nd_example,
 )
 
+__all__ = ["ODES"]
+
 # ODE metadata mapping for the sidebar and solver logic
 ODES = {
     "y' = k y": {

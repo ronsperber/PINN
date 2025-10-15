@@ -2,9 +2,10 @@ import streamlit as st
 import importlib
 import torch
 import numpy as np
-from pinn_utils import pinn
 import plotly.graph_objects as go
 import time
+
+from pinn_utils import pinn
 
 importlib.reload(pinn)
 
