@@ -3,16 +3,6 @@ import importlib
 import torch
 import numpy as np
 from pinn_utils import pinn
-from pinn_utils.de_sols import (
-    bernoulli_sol,
-    cauchy_euler_sol,
-    exp_sol,
-    logistic_sol,
-    linear_nonhomogeneous_sol,
-    linear_homogeneous_sol,
-    linear_2nd_nonhomogeneous_sol,
-    nonlinear_2nd_example,
-)
 import plotly.graph_objects as go
 import time
 
