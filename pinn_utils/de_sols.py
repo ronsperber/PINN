@@ -139,10 +139,17 @@ def linear_2nd_nonhomogeneous_sol(x0: float, y0: float, yprime0: float) -> Calla
     """
     # General solution: y = C1 e^x + C2 e^-x + (x/2) e^x
     # Solve for C1, C2 using initial conditions
-    A = np.array([[np.exp(x0), np.exp(-x0)], 
-                  [np.exp(x0) + x0/2 * np.exp(x0), -np.exp(-x0) + x0/2 * np.exp(x0)]])
-    Y = np.array([y0 - x0/2*np.exp(x0), yprime0 - (x0/2 + 1/2)*np.exp(x0)])
+    A = np.array([
+        [np.exp(x0),  np.exp(-x0)],
+        [np.exp(x0), -np.exp(-x0)]
+    ])
+    Y = np.array([
+        y0 - 0.5 * x0 * np.exp(x0),
+        yprime0 - 0.5 * (x0 + 1.0) * np.exp(x0)
+    ])
     C1, C2 = np.linalg.solve(A, Y)
+
+    print(f"C1: {C1}, C2: {C2}")
     def y_analytic(x: np.ndarray) -> np.ndarray:
         return C1 * np.exp(x) + C2 * np.exp(-x) + (x/2) * np.exp(x)
     return y_analytic

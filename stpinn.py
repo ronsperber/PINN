@@ -9,7 +9,8 @@ from pinn_utils.de_sols import (
     exp_sol, 
     logistic_sol, 
     linear_nonhomogeneous_sol,
-    linear_homogeneous_sol
+    linear_homogeneous_sol,
+    linear_2nd_nonhomogeneous_sol
 )
 import plotly.graph_objects as go
 import time
@@ -27,7 +28,8 @@ with st.sidebar:
             "y' = k y + sin(x)",
             "y' = k y\u00B2",
             "y'' + by' + cy = 0",
-            "x\u00B2 y'' + b x y' + c y = 0"
+            "x\u00B2 y'' + b x y' + c y = 0",
+            "y'' - y = eˣ"
         ]
     )
     ode_orders = {
@@ -36,7 +38,8 @@ with st.sidebar:
         "y' = k y + sin(x)":1,
         "y' = k y\u00B2":1,
         "y'' + by' + cy = 0":2,
-        "x\u00B2 y'' + b x y' + c y = 0":2
+        "x\u00B2 y'' + b x y' + c y = 0":2,
+        "y'' - y = eˣ":2
     }
     if ode_choice in ["y' = k y", "y' = k y (1 - y)", "y' = k y + sin(x)", "y' = k y\u00B2"]:
         k = st.number_input("k", value=1.0)
@@ -85,6 +88,8 @@ elif ode_choice == "y'' + by' + cy = 0":
     ode = f"d²y/dx² + {b} dy/dx + {c} y = 0"
 elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
     ode = f"x² d²y/dx² + {b} x dy/dx + {c} y = 0"
+elif ode_choice == "y'' - y = eˣ":
+    ode = "d²y/dx² - y = eˣ"
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 current_params = dict(ode_choice=ode_choice, x0=float(x0), y0=float(y0), x_start=float(x_start), x_end=float(x_end), n_points=int(n_points), epochs=int(epochs), lr=float(lr), num_hidden_layers=int(num_hidden_layers), layer_width=int(layer_width))
 if 'last_params' not in st.session_state:
@@ -140,6 +145,9 @@ if solve_clicked:
         F = lambda x, y, dy, ddy: x**2 * ddy + b * x * dy + c * y
         # Characteristic equation: r^2 + (b-1) r + c = 0
         true_sol = cauchy_euler_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c)
+    elif ode_choice == "y'' - y = eˣ":
+        F = lambda x, y, dy, ddy: ddy - y - torch.exp(x)
+        true_sol = linear_2nd_nonhomogeneous_sol(x0=x0, y0=y0, yprime0=yprime0)
 
 
     NN = pinn.PINN(

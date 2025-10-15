@@ -69,7 +69,7 @@ DE_TESTS = [
         linear_2nd_nonhomogeneous_sol,
         lambda y, x: numerical_derivative(y, x, order=2) - y(x) - np.exp(x),
         [{"x0": 0.0, "y0": 1.0, "yprime0": 1.0},
-         {"x0": 1.0, "y0": 2.0, "yprime0": 0.0}],
+         {"x0": 1.0, "y0": 1.0, "yprime0": -1.0}],
          2
     ),
     (
