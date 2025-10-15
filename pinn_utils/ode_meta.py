@@ -42,7 +42,7 @@ ODES = {
         "true_factory": lambda x0, y0, k=None, **kw: linear_nonhomogeneous_sol(k=k, x0=x0, y0=y0),
         "ode_str": lambda k=None, **kw: f"dy/dx = {k} y + sin(x)",
     },
-    "y' = k y^2": {
+    "y' = k y²": {
         "order": 1,
         "needs_k": True,
         "needs_b_c": False,
@@ -60,7 +60,7 @@ ODES = {
         "true_factory": lambda x0, y0, yprime0=None, b=None, c=None, **kw: linear_homogeneous_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c),
         "ode_str": lambda b=None, c=None, **kw: f"d²y/dx² + {b} dy/dx + {c} y = 0",
     },
-    "x^2 y'' + b x y' + c y = 0": {
+    "x² y'' + b x y' + c y = 0": {
         "order": 2,
         "needs_k": False,
         "needs_b_c": True,
@@ -69,7 +69,7 @@ ODES = {
         "true_factory": lambda x0, y0, yprime0=None, b=None, c=None, **kw: cauchy_euler_sol(x0=x0, y0=y0, yprime0=yprime0, b=b, c=c),
         "ode_str": lambda b=None, c=None, **kw: f"x² d²y/dx² + {b} x dy/dx + {c} y = 0",
     },
-    "y'' - y = e^x": {
+    "y'' - y = eˣ": {
         "order": 2,
         "needs_k": False,
         "needs_b_c": False,
@@ -78,7 +78,7 @@ ODES = {
         "true_factory": lambda x0, y0, yprime0=None, **kw: linear_2nd_nonhomogeneous_sol(x0=x0, y0=y0, yprime0=yprime0),
         "ode_str": lambda **kw: "d²y/dx² - y = eˣ",
     },
-    "y'' = k (y')^2": {
+    "y'' = k (y')²": {
         "order": 2,
         "needs_k": True,
         "needs_b_c": False,

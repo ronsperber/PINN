@@ -374,5 +374,8 @@ if 'frames' in st.session_state:
     # Show MSE for final frame if true solution is available
     final_frame = frames[-1]
     if final_frame.get('y_true') is not None:
-        mse = ((final_frame['y_true'] - final_frame['y_pred'])**2).mean()
+        # Ensure both arrays are 1-D and comparable to avoid broadcasting issues
+        y_true = np.asarray(final_frame['y_true']).flatten()
+        y_pred = np.asarray(final_frame['y_pred']).flatten()
+        mse = float(np.mean((y_true - y_pred) ** 2))
         st.write(f"MSE for PINN solution (final frame): {mse:.8f}")

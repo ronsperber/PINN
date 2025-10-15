@@ -18,11 +18,11 @@ def exp_sol(k: float, x0: float, y0: float) -> Callable:
 def cauchy_euler_sol(x0: float, y0: float, yprime0: float, b: float, c: float) -> Callable:
     """
     returns the analytic solution for the ODE
-    x^2 y'' + b x y' + c y = 0
+    x² y'' + b x y' + c y = 0
     y(x0) = y0
     y'(x0) = yprime0
     """
-    # Characteristic equation: r^2 + (b-1) r + c = 0
+    # Characteristic equation: r² + (b-1) r + c = 0
     coeffs = [1, b-1, c]
     r1, r2 = np.roots(coeffs)
 
@@ -116,7 +116,7 @@ def linear_nonhomogeneous_sol(k: float, x0: float, y0: float) -> Callable:
 # -----------------------
 def bernoulli_sol(k: float, x0: float, y0: float) -> Callable:
     """
-    Solves y' = k*y^2 (Bernoulli type)
+    Solves y' = k*y² (Bernoulli type)
     y(x0) = y0
     """
     if y0 != 0:
@@ -133,11 +133,11 @@ def bernoulli_sol(k: float, x0: float, y0: float) -> Callable:
 # -----------------------
 def linear_2nd_nonhomogeneous_sol(x0: float, y0: float, yprime0: float) -> Callable:
     """
-    Solves y'' - y = e^x
+    Solves y'' - y = eˣ
     y(x0) = y0
     y'(x0) = yprime0
     """
-    # General solution: y = C1 e^x + C2 e^-x + (x/2) e^x
+    # General solution: y = C1 eˣ + C2 e^-ˣ + (x/2) eˣ
     # Solve for C1, C2 using initial conditions
     A = np.array([
         [np.exp(x0),  np.exp(-x0)],
@@ -159,11 +159,11 @@ def linear_2nd_nonhomogeneous_sol(x0: float, y0: float, yprime0: float) -> Calla
 # -----------------------
 def nonlinear_2nd_example(k: float, x0: float, y0: float, yprime0: float) -> Callable:
     """
-    Analytic solution for y'' = k*(y')^2
+    Analytic solution for y'' = k*(y')²
     y(x0) = y0, y'(x0) = yprime0
     """
     if yprime0 != 0:
-        # First constant from integrating y'' = k*(y')^2
+    # First constant from integrating y'' = k*(y')²
         C1 = -1 / yprime0 - k * x0
         # Second constant from initial y
         C2 = y0 + (1 / k) * np.log(np.abs(k * x0 + C1))
