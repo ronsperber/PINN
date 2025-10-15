@@ -10,7 +10,8 @@ from pinn_utils.de_sols import (
     logistic_sol, 
     linear_nonhomogeneous_sol,
     linear_homogeneous_sol,
-    linear_2nd_nonhomogeneous_sol
+    linear_2nd_nonhomogeneous_sol,
+    nonlinear_2nd_example
 )
 import plotly.graph_objects as go
 import time
@@ -29,7 +30,8 @@ with st.sidebar:
             "y' = k y\u00B2",
             "y'' + by' + cy = 0",
             "x\u00B2 y'' + b x y' + c y = 0",
-            "y'' - y = eˣ"
+            "y'' - y = eˣ",
+            "y'' = k (y')\u00B2"  
         ]
     )
     ode_orders = {
@@ -39,9 +41,10 @@ with st.sidebar:
         "y' = k y\u00B2":1,
         "y'' + by' + cy = 0":2,
         "x\u00B2 y'' + b x y' + c y = 0":2,
-        "y'' - y = eˣ":2
+        "y'' - y = eˣ":2,
+        "y'' = k (y')\u00B2":2
     }
-    if ode_choice in ["y' = k y", "y' = k y (1 - y)", "y' = k y + sin(x)", "y' = k y\u00B2"]:
+    if ode_choice in ["y' = k y", "y' = k y (1 - y)", "y' = k y + sin(x)", "y' = k y\u00B2", "y'' = k (y')\u00B2"]:
         k = st.number_input("k", value=1.0)
     if ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
         x0 = st.number_input("x0 (must be > 0)", min_value=1e-6, value=1.0, key="x0_pos")
@@ -90,6 +93,8 @@ elif ode_choice == "x\u00B2 y'' + b x y' + c y = 0":
     ode = f"x² d²y/dx² + {b} x dy/dx + {c} y = 0"
 elif ode_choice == "y'' - y = eˣ":
     ode = "d²y/dx² - y = eˣ"
+elif ode_choice == "y'' = k (y')\u00B2":
+    ode = f"d²y/dx² = {k} (dy/dx)²"
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 current_params = dict(ode_choice=ode_choice, x0=float(x0), y0=float(y0), x_start=float(x_start), x_end=float(x_end), n_points=int(n_points), epochs=int(epochs), lr=float(lr), num_hidden_layers=int(num_hidden_layers), layer_width=int(layer_width))
 if 'last_params' not in st.session_state:
@@ -148,6 +153,9 @@ if solve_clicked:
     elif ode_choice == "y'' - y = eˣ":
         F = lambda x, y, dy, ddy: ddy - y - torch.exp(x)
         true_sol = linear_2nd_nonhomogeneous_sol(x0=x0, y0=y0, yprime0=yprime0)
+    elif ode_choice == "y'' = k (y')\u00B2":
+        F = lambda x, y, dy, ddy: ddy - k * dy**2
+        true_sol = nonlinear_2nd_example(k=k, x0=x0, y0=y0, yprime0=yprime0)
 
 
     NN = pinn.PINN(

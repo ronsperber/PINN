@@ -162,13 +162,15 @@ def nonlinear_2nd_example(k: float, x0: float, y0: float, yprime0: float) -> Cal
     Analytic solution for y'' = k*(y')^2
     y(x0) = y0, y'(x0) = yprime0
     """
-    # First constant from integrating y'' = k*(y')^2
-    C1 = -1 / yprime0 - k * x0
+    if yprime0 != 0:
+        # First constant from integrating y'' = k*(y')^2
+        C1 = -1 / yprime0 - k * x0
+        # Second constant from initial y
+        C2 = y0 + (1 / k) * np.log(np.abs(k * x0 + C1))
     
-    # Second constant from initial y
-    C2 = y0 + (1 / k) * np.log(np.abs(k * x0 + C1))
-    
-    def y_analytic(x: np.ndarray) -> np.ndarray:
-        return - (1 / k) * np.log(np.abs(k * x + C1)) + C2
-    
+        def y_analytic(x: np.ndarray) -> np.ndarray:
+            return - (1 / k) * np.log(np.abs(k * x + C1)) + C2
+    else:
+        def y_analytic(x: np.ndarray) -> np.ndarray:
+            return np.full_like(x, y0)
     return y_analytic
