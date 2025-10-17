@@ -1,3 +1,8 @@
+"""
+Metadata for all DE types in streamlit app
+used to create appropriate inputs in the sidebar
+and any logic needed for solver
+"""
 import numpy as np
 import torch
 from pinn_utils.de_sols import (

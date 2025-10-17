@@ -54,7 +54,7 @@ if meta.get('x0_positive'):
 else:
     x_start = st.sidebar.number_input("x start", value=x0, min_value=x0 - 5.0 - EPS, key="x_start_default")
     x_end = st.sidebar.number_input("x end", value=x_start + 2.0, min_value=x_start - EPS, key="x_end_default")
-
+# add optional parameters for the Neural network to potentially improve training
 with st.sidebar.expander("Neural Network Parameters", expanded=False):
     st.caption("Tweak only if the solver struggles or you want to experiment.")
     n_points = st.number_input("Number of points in interval", value=100, step=10)
@@ -86,11 +86,7 @@ elif st.session_state['last_params'] != current_params:
     st.session_state.pop('x_np', None)
     st.session_state.pop('png_bytes', None)
     st.session_state.pop('gif_bytes', None)
-    st.session_state['last_params'] = current_params
-
-import numpy as np
-
-
+    st.session_state['last_params'] = current_params 
 
 col1, col2 = st.columns([1,1])
 with col1:
@@ -112,8 +108,8 @@ if solve_clicked:
     elif meta.get('x0_positive') and x_start <= 0:
         st.sidebar.error("This ODE requires the interval start to be > 0. Please set x start to a positive value.")
     else:
+        # create the interval used to train the data
         x_train = torch.linspace(x_start, x_end, n_points).reshape(-1, 1).requires_grad_(True)
-
         # Build F and true solution using ODES metadata
         meta = ODES[ode_choice]
         # Create the residual function F using the factory. Factories accept k, b, c etc and ignore extras.
@@ -142,18 +138,19 @@ if solve_clicked:
                 st.sidebar.success("Analytic true solution built.")
         else:
             true_sol = None
-
-
+        # create the PINN to be used
         NN = pinn.PINN(
             num_hidden_layers=num_hidden_layers,
             layer_width=layer_width,
             input_activation=activation,
             hidden_activation=activation
             )
+        # create list of ICs
         if meta.get('order', 1) == 1:
             ics = [y0]
         else:
             ics = [y0, yprime0]
+        # solve the DE
         with st.spinner("Solving..."):
             y_trial, checkpoints = pinn.solve(F,
                                               x0,
@@ -184,7 +181,7 @@ if solve_clicked:
                 nn_copy.load_state_dict(state)
                 nn_copy.eval()
                 return nn_copy
-
+            # build frames from each checkpoint
             for checkpoint in checkpoints + [("final", y_trial)]:
                 ck_fn = checkpoint[1]
                 nn_for_eval = _nn_from_checkpoint_fn(ck_fn)
@@ -196,6 +193,7 @@ if solve_clicked:
                 y_fn = pinn.get_y_trial(x0, ics, nn_for_eval)
                 # ensure x_train requires grad for derivative computation
                 x_for_eval = x_train.detach().clone().requires_grad_(True)
+                # compute the PDE loss at each checkpoint
                 y_torch = y_fn(x_for_eval)
                 derivs = pinn.derivatives(y_torch, x_for_eval, len(ics))
                 try:
