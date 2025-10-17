@@ -92,4 +92,26 @@ ODES = {
         "true_factory": lambda x0, y0, yprime0=None, k=None, **kw: nonlinear_2nd_example(k=k, x0=x0, y0=y0, yprime0=yprime0),
         "ode_str": lambda k=None, **kw: f"d²y/dx² = {k} (dy/dx)²",
     },
+    "Linear system y' = A y": {
+    "is_system": True,
+    "num_equations": 2,
+    "param_names": ["A11", "A12", "A21", "A22"],
+    "init_names": ["t0", "y1_0", "y2_0"],
+    "x_label": "y₁",
+    "y_label": "y₂",
+    "ode_str": lambda **kw: "y' = A y",
+
+    "F_factory": lambda A=None, **kw: (
+        lambda t, y, dy: dy - torch.matmul(y, A.T)
+    ),
+
+    "true_factory": lambda x0=None, y0=None, t0=0.0,
+                            A=None, **kw: (
+        lambda t: (
+            torch.matrix_exp((t - t0)[:, None, None] * A)
+            @ y0.reshape(1, -1, 1)
+        ).squeeze(-1)
+    ),
+}
+
 }

@@ -21,7 +21,7 @@ meta = ODES[ode_choice]
 
 # Small tolerance to avoid float-boundary validation edge-cases in Streamlit inputs
 EPS = 1e-9
-
+A11 = A12 = A21 = A22 = None
 # Basic ICs and parameters (in sidebar)
 if meta.get('x0_positive'):
     # enforce positive x0 for ODEs that require it (e.g., Cauchy-Euler)
@@ -71,10 +71,23 @@ activation_dict = {
     "Swish": lambda x: x * torch.sigmoid(x)
 }
 
+params = {
+    "x0" : x0,
+    "y0" : y0,
+    "yprime0": yprime0,
+    "k" : k,
+    "b" : b,
+    "c" : c,
+    "A11": A11,
+    "A12": A12,
+    "A21": A21,
+    "A22": A22,
+}
+
 activation = activation_dict[activation_options]
 
 # Build a human-readable ODE string for titles
-ode = meta.get('ode_str', lambda **kw: ode_choice)(k=k, b=b, c=c)
+ode = meta.get('ode_str', lambda **kw: ode_choice)(**params)
 
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 current_params = dict(ode_choice=ode_choice, x0=float(x0), y0=float(y0), x_start=float(x_start), x_end=float(x_end), n_points=int(n_points), epochs=int(epochs), lr=float(lr), num_hidden_layers=int(num_hidden_layers), layer_width=int(layer_width))
@@ -113,14 +126,14 @@ if solve_clicked:
         # Build F and true solution using ODES metadata
         meta = ODES[ode_choice]
         # Create the residual function F using the factory. Factories accept k, b, c etc and ignore extras.
-        F = meta['F_factory'](k=k, b=b, c=c)
+        F = meta['F_factory'](**params)
         # Build true solution if factory provided
         true_factory = meta.get('true_factory')
         if callable(true_factory):
             true_sol = None
             true_factory_err = None
             try:
-                true_sol = true_factory(x0=x0, y0=y0, yprime0=yprime0, k=k, b=b, c=c)
+                true_sol = true_factory(**params)
             except Exception as e:
                 true_factory_err = e
                 try:
@@ -206,7 +219,7 @@ if solve_clicked:
                 # many analytic factories expect a 1-D numpy array; flatten to be safe
                 y_true = true_sol(x_np.flatten()) if true_sol is not None else None
                 if isinstance(checkpoint[0], int):
-                    title = f"Solution to {ode_choice}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
+                    title = f"Solution to {ode}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
                     epoch_val = int(checkpoint[0])
                 else:
                     if meta.get('order', 1) == 1:
