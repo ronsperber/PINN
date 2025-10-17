@@ -95,20 +95,41 @@ class PINN(nn.Module):
         x = self.output_layer(x)
         return self.output_activation(x)
 
-def derivatives(y:torch.Tensor, x:torch.Tensor, order:int) -> List[torch.Tensor]:
+def derivatives(y: torch.Tensor, x: torch.Tensor, order: int) -> List[torch.Tensor]:
     """
-    function to return [y,y',y'', ... y^(order)]
-    to be used in a differential equation F(x,y,y'..) = 0
+    function to return [y, y', y'', ... y^(order)]
+    to be used in a differential equation F(x, y, y'..) = 0
     """
     derivs = [y]  # 0th derivative
+    
     for _ in range(order):
-        dy_dx = torch.autograd.grad(
-            outputs=derivs[-1],
-            inputs=x,
-            grad_outputs=torch.ones_like(derivs[-1]),
-            create_graph=True
-        )[0]
+        current = derivs[-1]
+        
+        # Handle multi-dimensional output
+        if current.ndim > 1 and current.shape[1] > 1:
+            # Compute derivative of each output component separately
+            dy_dx_components = []
+            for i in range(current.shape[1]):
+                grad = torch.autograd.grad(
+                    outputs=current[:, i],
+                    inputs=x,
+                    grad_outputs=torch.ones(current.shape[0], device=current.device),
+                    create_graph=True,
+                    retain_graph=True
+                )[0]
+                dy_dx_components.append(grad)
+            dy_dx = torch.cat(dy_dx_components, dim=1)
+        else:
+            # Scalar case (original behavior)
+            dy_dx = torch.autograd.grad(
+                outputs=current,
+                inputs=x,
+                grad_outputs=torch.ones_like(current),
+                create_graph=True
+            )[0]
+        
         derivs.append(dy_dx)
+    
     return derivs  # [y, y', y'', ..., y^(order)]
 
 def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
