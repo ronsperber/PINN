@@ -150,9 +150,9 @@ if reset_clicked:
 
 if solve_clicked:
     # Validate positive-domain requirements before running solver
-    if meta.get('x0_positive') and x0 <= 0:
+    if meta.get('x0_positive', False) and x0 <= 0:
         st.sidebar.error("This ODE requires x0 > 0. Please set x0 to a positive value.")
-    elif meta.get('x0_positive') and x_start <= 0:
+    elif meta.get('x0_positive', False) and x_start <= 0:
         st.sidebar.error("This ODE requires the interval start to be > 0. Please set x start to a positive value.")
     else:
         # create the interval used to train the data
@@ -186,11 +186,15 @@ if solve_clicked:
         else:
             true_sol = None
         # create the PINN to be used
+        num_outputs = 1
+        if meta.get("is_system", False):
+            num_outputs = 2
         NN = pinn.PINN(
             num_hidden_layers=num_hidden_layers,
             layer_width=layer_width,
             input_activation=activation,
-            hidden_activation=activation
+            hidden_activation=activation,
+            num_outputs=num_outputs
             )
         # create list of ICs
         if meta.get('order', 1) == 1:
