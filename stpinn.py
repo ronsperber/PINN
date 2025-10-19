@@ -24,8 +24,7 @@ if meta.get("is_system", False):
     A12 = st.sidebar.number_input("A₂₁", value=1.0)
     A21 = st.sidebar.number_input("A₂₁", value=-1.0)
     A22 = st.sidebar.number_input("A₂₂", value=0.0)
-    
-    t0 = st.sidebar.number_input("t₀", value=0.0)
+    x0 = st.sidebar.number_input("t₀", value=0.0)
     y1_0 = st.sidebar.number_input("y₁(t₀)", value=1.0)
     y2_0 = st.sidebar.number_input("y₂(t₀)", value=0.0)
     
@@ -33,11 +32,11 @@ if meta.get("is_system", False):
     x_start =st.sidebar.number_input("t_start", value=0.0)
     x_end = st.sidebar.number_input("t_end", value = x_start + 2.0)
     # non-applicable scalar ODE params
-    x0 = y0 = k = b = c = yprime0 = None
+    k = b = c = yprime0 = None
 else:
     # Small tolerance to avoid float-boundary validation edge-cases in Streamlit inputs
     EPS = 1e-9
-    A11 = A12 = A21 = A22 = t0 = None
+    A11 = A12 = A21 = A22 = None
     # Basic ICs and parameters (in sidebar)
     if meta.get('x0_positive'):
         # enforce positive x0 for ODEs that require it (e.g., Cauchy-Euler)
@@ -101,11 +100,19 @@ activation = activation_dict[activation_options]
 
 # Build a human-readable ODE string for titles
 ode = meta.get('ode_str', lambda **kw: ode_choice)(**params)
+# function to safely store vectors in params for comparison
+
+def to_serializable(val):
+    if torch.is_tensor(val):
+        return val.detach().cpu().numpy().tolist()  # convert to list
+    elif isinstance(val, (list, tuple)):
+        return [to_serializable(v) for v in val]
+    else:
+        return val
 
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 current_params = dict(
     ode_choice=ode_choice,
-    t0=t0,
     k=k,
     b=b,
     c=c,
@@ -114,8 +121,8 @@ current_params = dict(
     A21=A21,
     A22=A22,
     x0=x0,
-    y0=y0,
-    yprime0=yprime0,
+    y0=to_serializable(y0),
+    yprime0=to_serializable(yprime0),
     x_start=x_start,
     x_end=x_end,
     n_points=int(n_points),
@@ -228,7 +235,13 @@ if solve_clicked:
                 if state is None:
                     return None
                 # build a fresh NN with same architecture
-                nn_copy = pinn.PINN(num_hidden_layers=num_hidden_layers, layer_width=layer_width, input_activation=activation, hidden_activation=activation)
+                nn_copy = pinn.PINN(
+                    num_hidden_layers=num_hidden_layers, 
+                    layer_width=layer_width,
+                    input_activation=activation,
+                    hidden_activation=activation,
+                    num_outputs=num_outputs
+                    )
                 nn_copy.load_state_dict(state)
                 nn_copy.eval()
                 return nn_copy

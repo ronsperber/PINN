@@ -101,17 +101,20 @@ ODES = {
     "y_label": "y₂",
     "ode_str": lambda **kw: "y' = A y",
 
-    "F_factory": lambda A=None, **kw: (
-        lambda t, y, dy: dy - torch.matmul(y, A.T)
+    "F_factory": lambda A11=None, A12=None, A21=None, A22=None, **kw: (
+        lambda t, y, dy: dy - torch.matmul(y, torch.tensor([[A11, A12],[A21,A22]]).T)
     ),
 
     "true_factory": lambda x0=None, y0=None, t0=0.0,
-                            A=None, **kw: (
-        lambda t: (
-            torch.matrix_exp((t - t0)[:, None, None] * A)
-            @ y0.reshape(1, -1, 1)
-        ).squeeze(-1)
-    ),
+    A11=None, A12=None, A21=None, A22=None, **kw: (lambda t: (
+        torch.matrix_exp(
+            (torch.as_tensor(t, dtype=torch.float32).reshape(-1, 1, 1) - t0)
+            * torch.tensor([[A11, A12], [A21, A22]], dtype=torch.float32)
+        )
+        @ y0.reshape(1, -1, 1)
+    ).squeeze(-1).detach().numpy()
+    )
+
 }
 
 }
