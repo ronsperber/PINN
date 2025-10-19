@@ -329,10 +329,16 @@ if 'frames' in st.session_state:
 
     plotly_frames = []
     for i, fr in enumerate(frames):
-        data = [go.Scatter(x=x, y=fr['y_pred'].flatten())]
+        if meta.get("is_system", False):
+            data = [go.Scatter(x=fr['y_pred'][:,0].flatten(), y=fr['y_pred'][:,1].flatten(), mode='lines', name = 'Prediction')]
+        else:
+            data = [go.Scatter(x=x, y=fr['y_pred'].flatten())]
         annotations = []
         if fr['y_true'] is not None:
-            data.append(go.Scatter(x=x, y=fr['y_true'].flatten()))
+            if meta.get("is_system", False):
+                data.append(go.Scatter(x=fr['y_true'][:,0].flatten(), y=fr['y_true'][:,1].flatten(), mode='lines', name= 'True Solution', line=dict(dash='dash')))
+            else:
+                data.append(go.Scatter(x=x, y=fr['y_true'].flatten()))
             mse = np.mean((fr['y_pred'].flatten() - fr['y_true'].flatten())**2)
             ann_text = f"MSE: {mse:.6f}"
             # include PDE residual when available
