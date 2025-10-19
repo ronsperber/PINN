@@ -299,9 +299,33 @@ if 'frames' in st.session_state:
     # Initialize figure using the final frame so users see the final solution by default
     final_idx = n_frames - 1
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=frames[final_idx]['y_pred'].flatten(), mode='lines', name='Prediction'))
-    if has_true:
-        fig.add_trace(go.Scatter(x=x, y=frames[final_idx]['y_true'].flatten(), mode='lines', name='True Solution', line=dict(dash='dash')))
+    if meta.get("is_system", False):
+        # phase-space trajectory plot
+        y_pred_final = frames[final_idx]['y_pred']
+        fig.add_trace(go.Scatter(
+            x=y_pred_final[:, 0],
+            y=y_pred_final[:, 1],
+            mode='lines',
+            name='Prediction'
+        ))
+        if has_true:
+            y_true_final = frames[final_idx]['y_true']
+            fig.add_trace(go.Scatter(
+                x=y_true_final[:, 0],
+                y=y_true_final[:, 1],
+                mode='lines',
+                name='True Solution',
+                line=dict(dash='dash')
+            ))
+        fig.update_layout(
+            xaxis_title="y₁(t)",
+            yaxis_title="y₂(t)",
+            title="Phase-space trajectory"
+        )
+    else:
+        fig.add_trace(go.Scatter(x=x, y=frames[final_idx]['y_pred'].flatten(), mode='lines', name='Prediction'))
+        if has_true:
+            fig.add_trace(go.Scatter(x=x, y=frames[final_idx]['y_true'].flatten(), mode='lines', name='True Solution', line=dict(dash='dash')))
 
     plotly_frames = []
     for i, fr in enumerate(frames):
