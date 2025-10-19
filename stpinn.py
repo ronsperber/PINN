@@ -18,42 +18,55 @@ from pinn_utils.ode_meta import ODES
 # Sidebar inputs driven by ODES metadata
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
 meta = ODES[ode_choice]
-
-# Small tolerance to avoid float-boundary validation edge-cases in Streamlit inputs
-EPS = 1e-9
-A11 = A12 = A21 = A22 = None
-# Basic ICs and parameters (in sidebar)
-if meta.get('x0_positive'):
-    # enforce positive x0 for ODEs that require it (e.g., Cauchy-Euler)
-    x0 = st.sidebar.number_input("x0", value=1.0, min_value=1e-6)
+if meta.get("is_system", False):
+    # System inputs
+    A11 = st.sidebar.number_input("A₁₁", value=0.0)
+    A12 = st.sidebar.number_input("A₂₁", value=1.0)
+    A21 = st.sidebar.number_input("A₂₁", value=-1.0)
+    A22 = st.sidebar.number_input("A₂₂", value=0.0)
+    
+    t0 = st.sidebar.number_input("t₀", value=0.0)
+    y1_0 = st.sidebar.number_input("y₁(t₀)", value=1.0)
+    y2_0 = st.sidebar.number_input("y₂(t₀)", value=0.0)
+    
+    y0 = torch.tensor([y1_0, y2_0])
+    x_start =st.sidebar.number_input("t_start", value=0.0)
+    x_end = st.sidebar.number_input("t_end", value = x_start + 2.0)
+    # non-applicable scalar ODE params
+    x0 = y0 = k = b = c = yprime0 = None
 else:
-    x0 = st.sidebar.number_input("x0", value=0.0)
-if meta.get('needs_k'):
-    k = st.sidebar.number_input("k", value=1.0)
-else:
-    k = None
-
-y0 = st.sidebar.number_input("y(x0)", value=1.0)
-if meta.get('order', 1) == 2:
-    yprime0 = st.sidebar.number_input("y'(x0)", value=0.0)
-else:
-    yprime0 = None
-
-if meta.get('needs_b_c'):
-    b = st.sidebar.number_input("b", value=2.0)
-    c = st.sidebar.number_input("c", value=1.0)
-else:
-    b = None
-    c = None
-
-if meta.get('x0_positive'):
-    # allow a tiny tolerance so users can type values like 0.50 without floating-point validation errors
-    x_start_min = max(1e-6, x0 - EPS)
-    x_start = st.sidebar.number_input("x start (must be > 0)", min_value=x_start_min, value=x0, key="x_start_positive")
-    x_end = st.sidebar.number_input("x end", min_value=max(x_start - EPS, 1e-6), value=x_start + 5.0, key="x_end_pos")
-else:
-    x_start = st.sidebar.number_input("x start", value=x0, min_value=x0 - 5.0 - EPS, key="x_start_default")
-    x_end = st.sidebar.number_input("x end", value=x_start + 2.0, min_value=x_start - EPS, key="x_end_default")
+    # Small tolerance to avoid float-boundary validation edge-cases in Streamlit inputs
+    EPS = 1e-9
+    A11 = A12 = A21 = A22 = t0 = None
+    # Basic ICs and parameters (in sidebar)
+    if meta.get('x0_positive'):
+        # enforce positive x0 for ODEs that require it (e.g., Cauchy-Euler)
+        x0 = st.sidebar.number_input("x0", value=1.0, min_value=1e-6)
+    else:
+        x0 = st.sidebar.number_input("x0", value=0.0)
+    if meta.get('needs_k'):
+        k = st.sidebar.number_input("k", value=1.0)
+    else:
+        k = None
+    y0 = st.sidebar.number_input("y(x0)", value=1.0)
+    if meta.get('order', 1) == 2:
+        yprime0 = st.sidebar.number_input("y'(x0)", value=0.0)
+    else:
+        yprime0 = None
+    if meta.get('needs_b_c'):
+        b = st.sidebar.number_input("b", value=2.0)
+        c = st.sidebar.number_input("c", value=1.0)
+    else:
+        b = None
+        c = None
+    if meta.get('x0_positive'):
+        # allow a tiny tolerance so users can type values like 0.50 without floating-point validation errors
+        x_start_min = max(1e-6, x0 - EPS)
+        x_start = st.sidebar.number_input("x start (must be > 0)", min_value=x_start_min, value=x0, key="x_start_positive")
+        x_end = st.sidebar.number_input("x end", min_value=max(x_start - EPS, 1e-6), value=x_start + 5.0, key="x_end_pos")
+    else:
+        x_start = st.sidebar.number_input("x start", value=x0, min_value=x0 - 5.0 - EPS, key="x_start_default")
+        x_end = st.sidebar.number_input("x end", value=x_start + 2.0, min_value=x_start - EPS, key="x_end_default")
 # add optional parameters for the Neural network to potentially improve training
 with st.sidebar.expander("Neural Network Parameters", expanded=False):
     st.caption("Tweak only if the solver struggles or you want to experiment.")
@@ -90,7 +103,28 @@ activation = activation_dict[activation_options]
 ode = meta.get('ode_str', lambda **kw: ode_choice)(**params)
 
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
-current_params = dict(ode_choice=ode_choice, x0=float(x0), y0=float(y0), x_start=float(x_start), x_end=float(x_end), n_points=int(n_points), epochs=int(epochs), lr=float(lr), num_hidden_layers=int(num_hidden_layers), layer_width=int(layer_width))
+current_params = dict(
+    ode_choice=ode_choice,
+    t0=t0,
+    k=k,
+    b=b,
+    c=c,
+    A11=A11,
+    A12=A12,
+    A21=A21,
+    A22=A22,
+    x0=x0,
+    y0=y0,
+    yprime0=yprime0,
+    x_start=x_start,
+    x_end=x_end,
+    n_points=int(n_points),
+    epochs=int(epochs),
+    lr=float(lr),
+    num_hidden_layers=int(num_hidden_layers),
+    layer_width=int(layer_width),
+    activation=activation
+    )
 if 'last_params' not in st.session_state:
     st.session_state['last_params'] = current_params
 elif st.session_state['last_params'] != current_params:
