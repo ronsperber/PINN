@@ -202,7 +202,7 @@ def solve(F: Callable,
     print_every: int
         How often to print out the current loss and validation loss
     val_size: int | float
-        what size to make the validation set. If this is an int
+        what size to make the validation set. If this is an int,
         it is the absolute size of the validation set. If this is in (0,1),
         it is a relative size compared to the training set size
     early_stopping : Optional[dict]
