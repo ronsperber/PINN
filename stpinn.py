@@ -224,7 +224,9 @@ if solve_clicked:
         start_time = time.time()
 
         def _format_seconds(s: float) -> str:
-            # Format seconds into H:MM:SS (or MM:SS) for display
+            """
+            Format seconds into H:MM:SS (or MM:SS) for display
+            """
             if s is None or s != s or s < 0:
                 return "-"
             s = int(round(s))
@@ -235,6 +237,10 @@ if solve_clicked:
             return f"{m:02d}:{sec:02d}"
 
         def _progress_callback(epoch, train_loss, val_loss):
+            """
+            callback function passed to solve to use
+            for displaying progress and ETA
+            """
             # epoch ranges from 1..epochs; clamp and compute fraction
             try:
                 frac = min(max(epoch / max(1, int(epochs)), 0.0), 1.0)

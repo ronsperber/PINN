@@ -213,6 +213,10 @@ def solve(F: Callable,
         whether or not to return intermediate solutions
     checkpoint_every : int
         when return_checkpoints is true, how often to return a checkpoint of values
+    progress_callback : Optional[Callable]
+        when defined, is a function used to send progress to whatever is calling solve
+    progress_every : int
+        when there is a progress_callback, how often to call it
     
     Returns
     solution : callable
