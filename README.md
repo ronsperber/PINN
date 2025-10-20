@@ -73,6 +73,7 @@ which is the mean square residual comparing $F$ to $0$.
 - `pinn_utils/ode_meta.py`: Dictionary of metadata for each DE. Includes order, parameters, `F` function, analytic solution (if available), and display information.
 
 - `stpinn.py`: Streamlit app demonstrating the solver and showing analytic solutions for comparison.
+- `test_all_desols.py`: Unit test using numeric differentiation approximation to verify that the analytic solutions are correct
 
 Example of creating a PINN for a single ODE:
 ```python
