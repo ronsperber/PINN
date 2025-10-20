@@ -1,7 +1,3 @@
-This repository contains a module that is intended for using a physics informed neural network (or PINN) to solve ordinary differential equations and systems of ordinary differential equations. It also contains a streamlit app with some choices
-for the user to select a differential equation and initial condition(s), along with in some cases parameters for the equation. The app will then generate the solution the equation and produce plotly graph that includes some intermediate solutions
-along with the final solution to the equation. The ones on the app all have analytic solutions which can be seen along with what the neural network generated.
-
 ### Approach
 
 The idea here is that we create a collection of points in the interval that we want the solution generated for. We then use the differential equation to define a loss function.  

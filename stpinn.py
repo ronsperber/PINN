@@ -4,17 +4,19 @@ import torch
 import numpy as np
 import plotly.graph_objects as go
 import time
-
+from pathlib import Path
 from pinn_utils import pinn
-
-importlib.reload(pinn)
-
-
-st.title("PINN ODE Solver")
-
-# Full ODE metadata mapping for the sidebar and solver logic
 from pinn_utils.ode_meta import ODES
-
+def read_markdown_file(file_path):
+    """Reads the content of a Markdown file."""
+    return Path(file_path).read_text()
+# read the markdown with mathematical background
+math_md = read_markdown_file("PINN_math.md")
+importlib.reload(pinn)
+st.title("Solving ODEs using a PINN (Physics Informed Neural Network)")
+st.write("To see a differential equation solved using a PINN, select an equation type on the left, adjust any desired parameters, and press solve.")
+with st.expander("Expand to see the mathematics behind this method.", expanded=False):
+    st.markdown(math_md)
 # Sidebar inputs driven by ODES metadata
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
 meta = ODES[ode_choice]
