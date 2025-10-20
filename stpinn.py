@@ -369,7 +369,6 @@ if 'frames' in st.session_state:
         plotly_frames.append(go.Frame(data=data, name=str(i), layout=go.Layout(title=fr['title'], annotations=annotations)))
 
     n_frames = len(frames)
-    base_duration = 50  # ms per frame for a medium-length animation
     duration_ms = max(10, min(200, int(5000 / n_frames)))
 
     # Use epoch labels on the slider steps (show 'Epoch N' or 'Final')
