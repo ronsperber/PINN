@@ -38,6 +38,7 @@ if meta.get("is_system", False):
 else:
     # Small tolerance to avoid float-boundary validation edge-cases in Streamlit inputs
     EPS = 1e-9
+    # non-applicable system ODE params
     A11 = A12 = A21 = A22 = None
     # Basic ICs and parameters (in sidebar)
     if meta.get('x0_positive'):
@@ -84,7 +85,7 @@ activation_dict = {
     "ReLU": torch.nn.ReLU(),
     "Swish": lambda x: x * torch.sigmoid(x)
 }
-
+# parameters to be passed to factories (F_factory and true_sol_factory)
 params = {
     "x0" : x0,
     "y0" : y0,
@@ -105,14 +106,20 @@ ode = meta.get('ode_str', lambda **kw: ode_choice)(**params)
 # function to safely store vectors in params for comparison
 
 def to_serializable(val):
+    """
+    convert tensors to lists for storing as session parameters
+    used so we can compare current to stored parameters 
+    """
     if torch.is_tensor(val):
         return val.detach().cpu().numpy().tolist()  # convert to list
     elif isinstance(val, (list, tuple)):
+        # if we have a list or tuple of parameters, make sure we convert each element
         return [to_serializable(v) for v in val]
     else:
         return val
 
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
+# current_params holds all sidebar parameters
 current_params = dict(
     ode_choice=ode_choice,
     k=k,
@@ -249,12 +256,12 @@ if solve_clicked:
                 return nn_copy
             # build frames from each checkpoint
             for checkpoint in checkpoints + [("final", y_trial)]:
-                ck_fn = checkpoint[1]
+                # checkpoints are pairs (epoch, intermediate solution)
+                ck_fn = checkpoint[1] 
                 nn_for_eval = _nn_from_checkpoint_fn(ck_fn)
                 if nn_for_eval is None:
                     # final frame: use the trained NN instance
                     nn_for_eval = NN
-
                 # build a differentiable trial function from this NN so we can compute derivatives/residual
                 y_fn = pinn.get_y_trial(x0, ics, nn_for_eval)
                 # ensure x_train requires grad for derivative computation
@@ -267,7 +274,6 @@ if solve_clicked:
                     pde_loss = float(torch.mean(res**2).item())
                 except Exception as e:
                     pde_loss = None
-
                 y_pred = y_torch.detach().numpy()
                 # many analytic factories expect a 1-D numpy array; flatten to be safe
                 y_true = true_sol(x_np.flatten()) if true_sol is not None else None
@@ -287,17 +293,13 @@ if solve_clicked:
         # clear previous exports when new solution is computed
         st.session_state.pop('png_bytes', None)
         st.session_state.pop('gif_bytes', None)
-
-
 if 'frames' in st.session_state:
     frames = st.session_state['frames']
     x_np = st.session_state['x_np']
     n_frames = len(frames)
-
-    # Prepare Plotly animated figure (client-side animation)
+    # Prepare Plotly animated figure 
     x = x_np.flatten()
     has_true = any(fr['y_true'] is not None for fr in frames)
-
     # Initialize figure using the final frame so users see the final solution by default
     final_idx = n_frames - 1
     fig = go.Figure()
@@ -366,7 +368,10 @@ if 'frames' in st.session_state:
 
         plotly_frames.append(go.Frame(data=data, name=str(i), layout=go.Layout(title=fr['title'], annotations=annotations)))
 
-    duration_ms = max(1, int(0.2 * 1000))
+    n_frames = len(frames)
+    base_duration = 50  # ms per frame for a medium-length animation
+    duration_ms = max(10, min(200, int(5000 / n_frames)))
+
     # Use epoch labels on the slider steps (show 'Epoch N' or 'Final')
     steps = []
     for i, fr in enumerate(frames):
