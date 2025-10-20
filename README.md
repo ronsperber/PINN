@@ -1,6 +1,9 @@
-This repository contains a module that is intended for using a physics informed neural network (or PINN) to solve ordinary differential equations and systems of ordinary differential equations. It also contains a streamlit app with some choices
-for the user to select a differential equation and initial condition(s), along with in some cases parameters for the equation. The app will then generate the solution the equation and produce plotly graph that includes some intermediate solutions
-along with the final solution to the equation. The ones on the app all have analytic solutions which can be seen along with what the neural network generated.
+# Physics-Informed Neural Networks for ODEs and Systems
+
+This repository contains a module for using a physics-informed neural network (PINN) to solve ordinary differential equations (ODEs) and systems of ODEs.  
+It also contains a Streamlit app that allows the user to select a differential equation, initial condition(s), and, in some cases, parameters.  
+The app then generates the solution using a neural network and displays a Plotly graph showing intermediate and final solutions.  
+Analytic solutions (where available) are shown for comparison.
 
 ### Approach
 
@@ -60,12 +63,18 @@ $$
 which is the mean square residual comparing $F$ to $0$.
 
 ### Contents of the repository
-`pinn_utils/pinn.py` : contains the PINN class used and the solve function used to solve a given DE
 
-`PINN` class creates a feed forward Neural Network with an input layers, several hidden layers and an output layer. There is an activation function specified for the input layer,
-either a single activation for all the hidden layers or a list of activations, one for each layer, and an output activation layer (strongly recommended to be the identity function).
+- `pinn_utils/pinn.py`: Contains the `PINN` class and `solve` function.
+  - `PINN` creates a feed-forward neural network with input, hidden, and output layers. Activation functions can be specified per layer.
+  - `solve` trains the network to minimize the residual of a given DE, using initial conditions and the supplied `F` function.
 
-example: 
+- `pinn_utils/de_sols.py`: Analytic solutions for example DEs used in the app.
+
+- `pinn_utils/ode_meta.py`: Dictionary of metadata for each DE. Includes order, parameters, `F` function, analytic solution (if available), and display information.
+
+- `stpinn.py`: Streamlit app demonstrating the solver and showing analytic solutions for comparison.
+
+Example of creating a PINN for a single ODE:
 ```python
 NN = pinn.PINN(
   num_hidden_layers=3,
@@ -77,43 +86,24 @@ NN = pinn.PINN(
   num_outputs=1
 )
 ```
-
-creates a PINN intended to solve a single ODE, will create an input layer, 3 hidden layers, and an output layer. Each layer will have 64 neurons, and the activation for all layers other than 
-the output layer will be tanh.
-
-The `solve` function takes in a PINN, a differential equation F that is expected to be zero, an x that contains the values over which the equation is to be solved and initial conditions $x_0$ and $y(x_0), y'(x_0),\ldots$
-
-For example using the `NN` defined above, suppose we wanted to solve $y' = y$, $y(0)=1$ on the interval $\[-1,1\]$:
-To get the differential equation we could define 
+Example of solving $y' = y$, $y(0)=1$ on $[-1,1]$:
 ```python
-F = lambda x, y, dy : y - dy
-a=0
-ics=[1]
-x = torch.linspace(-1,1,200).reshape(-1,1)
-```
-Then to get the solution we could call
-```python
+F = lambda x, y, dy: dy - y
+a = 0
+ics = [1]
+x = torch.linspace(-1, 1, 200).reshape(-1,1)
+
 solution = pinn.solve(
-                      F=F,
-                      a=a,
-                      ics=ics,
-                      NN=NN,
-                      x=x,
-                      epochs=1000,
-                      lr=1e-3
-                    )
+    F=F,
+    a=a,
+    ics=ics,
+    NN=NN,
+    x=x,
+    epochs=1000,
+    lr=1e-3
+)
 ```
+#### Internal functions
+`get_y_trial` : generates the trial function, given $x_0$, the initial conditions, and `NN`
 
-`pinn_utils/pinn.py` also contains some functions used internally, notably `get_y_trial` which generated a trial function as described at the top given $x_0$, the initial conditions and $NN$,
-and `get_loss` which takes the initial conditions, the neural network, and the $F$ defined to create a loss function used during training
-
-`pinn_utils/de_sols.py` : Contains analytic solutions for the example DEs in the streamlit app
-`pinn_utils/ode_meta.py` : Contains a dictionary of meta data used for solving the equation in the streamlit app
-Typical data includes: the order of the DE, what parameters will need to be supplied, what the $F$ used to define the DE will be, what the analytic solution (if any) is, and information about text display in the graph
-
-`stpinn.py` is the streamlit app that demonstrates the solver and shows for comparison the analytic solution
-It can be run by doing 
-```bash
-streamlit run stpinn.py
-```
-
+`get_loss` : Generates the loss function using initial conditions, the neural network, and the differential equation $F$.
