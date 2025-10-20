@@ -58,3 +58,62 @@ L(x) = \frac{1}{|X|} \sum_{x \in X} \big(F(x, y(x), y'(x), \ldots, y^{(k)}(x))\b
 $$
 
 which is the mean square residual comparing $F$ to $0$.
+
+### Contents of the repository
+`pinn_utils/pinn.py` : contains the PINN class used and the solve function used to solve a given DE
+
+`PINN` class creates a feed forward Neural Network with an input layers, several hidden layers and an output layer. There is an activation function specified for the input layer,
+either a single activation for all the hidden layers or a list of activations, one for each layer, and an output activation layer (strongly recommended to be the identity function).
+
+example: 
+```python
+NN = pinn.PINN(
+  num_hidden_layers=3,
+  layer_width=64,
+  input_activation=nn.Tanh(),
+  hidden_activation=nn.Tanh(),
+  output_activation=nn.Identity(),
+  num_inputs=1,
+  num_outputs=1
+)
+```
+
+creates a PINN intended to solve a single ODE, will create an input layer, 3 hidden layers, and an output layer. Each layer will have 64 neurons, and the activation for all layers other than 
+the output layer will be tanh.
+
+The `solve` function takes in a PINN, a differential equation F that is expected to be zero, an x that contains the values over which the equation is to be solved and initial conditions $x_0$ and $y(x_0), y'(x_0),\ldots$
+
+For example using the `NN` defined above, suppose we wanted to solve $y' = y$, $y(0)=1$ on the interval $\[-1,1\]$:
+To get the differential equation we could define 
+```python
+F = lambda x, y, dy : y - dy
+a=0
+ics=[1]
+x = torch.linspace(-1,1,200).reshape(-1,1)
+```
+Then to get the solution we could call
+```python
+solution = pinn.solve(
+                      F=F,
+                      a=a,
+                      ics=ics,
+                      NN=NN,
+                      x=x,
+                      epochs=1000,
+                      lr=1e-3
+                    )
+```
+
+`pinn_utils/pinn.py` also contains some functions used internally, notably `get_y_trial` which generated a trial function as described at the top given $x_0$, the initial conditions and $NN$,
+and `get_loss` which takes the initial conditions, the neural network, and the $F$ defined to create a loss function used during training
+
+`pinn_utils/de_sols.py` : Contains analytic solutions for the example DEs in the streamlit app
+`pinn_utils/ode_meta.py` : Contains a dictionary of meta data used for solving the equation in the streamlit app
+Typical data includes: the order of the DE, what parameters will need to be supplied, what the $F$ used to define the DE will be, what the analytic solution (if any) is, and information about text display in the graph
+
+`stpinn.py` is the streamlit app that demonstrates the solver and shows for comparison the analytic solution
+It can be run by doing 
+```bash
+streamlit run stpinn.py
+```
+
