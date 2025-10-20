@@ -107,3 +107,31 @@ solution = pinn.solve(
 `get_y_trial` : generates the trial function, given $x_0$, the initial conditions, and `NN`
 
 `get_loss` : Generates the loss function using initial conditions, the neural network, and the differential equation $F$.
+
+### Running the Streamlit App
+
+You can launch the interactive Streamlit app to experiment with both single ODEs and systems of ODEs:
+
+```bash
+streamlit run stpinn.py
+```
+#### Features in the app:
+
+-Select from example differential equations or systems.
+
+-Enter initial conditions and parameters.
+
+-View the neural network solution evolving over training epochs via an animated Plotly graph.
+
+-Compare the PINN solution to the analytic solution (if available).
+
+-Adjust the time interval for the solution and network hyperparameters like number of hidden layers, layer width, activation functions, learning rate, and number of epochs.
+
+#### Notes on systems of ODEs:
+
+-For linear systems like $y' = A y$, enter the components of the matrix $A$ and the initial vector $y_0$.
+
+-The x/y plot shows the trajectory of the system in phase space.
+
+-Analytic solutions (where available) are displayed for comparison.
+
