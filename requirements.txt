@@ -1,0 +1,21 @@
+# Streamlit web app
+streamlit==1.29.0
+
+# Neural network backend
+torch==2.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+
+# Numeric and symbolic computation
+numpy
+scipy
+sympy
+pandas
+
+# Plotting
+matplotlib
+plotly
+
+# Optional: nicer tables/formatting if you use them
+altair
+
+# Utilities
+scikit-learn
