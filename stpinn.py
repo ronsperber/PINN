@@ -217,7 +217,42 @@ if solve_clicked:
             ics = [y0]
         else:
             ics = [y0, yprime0]
-        # solve the DE
+        # solve the DE with a progress bar
+        progress_bar = st.progress(0)
+        progress_text = st.empty()
+        # Record start time so we can estimate remaining time
+        start_time = time.time()
+
+        def _format_seconds(s: float) -> str:
+            # Format seconds into H:MM:SS (or MM:SS) for display
+            if s is None or s != s or s < 0:
+                return "-"
+            s = int(round(s))
+            h, rem = divmod(s, 3600)
+            m, sec = divmod(rem, 60)
+            if h:
+                return f"{h}:{m:02d}:{sec:02d}"
+            return f"{m:02d}:{sec:02d}"
+
+        def _progress_callback(epoch, train_loss, val_loss):
+            # epoch ranges from 1..epochs; clamp and compute fraction
+            try:
+                frac = min(max(epoch / max(1, int(epochs)), 0.0), 1.0)
+            except Exception:
+                frac = 0.0
+            progress_bar.progress(int(frac * 100))
+            # estimate remaining time based on avg seconds per epoch so far
+            elapsed = time.time() - start_time
+            eta = None
+            try:
+                if epoch > 0:
+                    avg = elapsed / epoch
+                    eta = avg * max(0, int(epochs) - epoch)
+            except Exception:
+                eta = None
+            eta_str = _format_seconds(eta) if eta is not None else "-"
+            progress_text.text(f"Epoch {epoch}/{epochs} — train_loss: {train_loss:.6e}, val_loss: {val_loss:.6e} — ETA: {eta_str}")
+
         with st.spinner("Solving..."):
             y_trial, checkpoints = pinn.solve(F,
                                               x0,
@@ -227,66 +262,73 @@ if solve_clicked:
                                               epochs=epochs,
                                               val_size=0.1, 
                                               lr=lr,
-                                              return_checkpoints=True)
+                                              return_checkpoints=True,
+                                              progress_callback=_progress_callback,
+                                              progress_every=10)
 
-            # Build frames (prediction, optional true) and store in session_state
-            x_np = x_train.detach().numpy()
-            frames = []
-            # helper to reconstruct a NN from checkpoint state (if provided)
-            def _nn_from_checkpoint_fn(ck_fn):
+        # clear progress UI
+        progress_bar.empty()
+        progress_text.empty()
+
+        # Build frames (prediction, optional true) and store in session_state
+        x_np = x_train.detach().numpy()
+        frames = []
+        # helper to reconstruct a NN from checkpoint state (if provided)
+        def _nn_from_checkpoint_fn(ck_fn):
+            state = None
+            try:
+                defaults = ck_fn.__defaults__
+                if defaults and len(defaults) > 0:
+                    state = defaults[0]
+            except Exception:
                 state = None
-                try:
-                    defaults = ck_fn.__defaults__
-                    if defaults and len(defaults) > 0:
-                        state = defaults[0]
-                except Exception:
-                    state = None
-                if state is None:
-                    return None
-                # build a fresh NN with same architecture
-                nn_copy = pinn.PINN(
-                    num_hidden_layers=num_hidden_layers, 
-                    layer_width=layer_width,
-                    input_activation=activation,
-                    hidden_activation=activation,
-                    num_outputs=num_outputs
-                    )
-                nn_copy.load_state_dict(state)
-                nn_copy.eval()
-                return nn_copy
-            # build frames from each checkpoint
-            for checkpoint in checkpoints + [("final", y_trial)]:
-                # checkpoints are pairs (epoch, intermediate solution)
-                ck_fn = checkpoint[1] 
-                nn_for_eval = _nn_from_checkpoint_fn(ck_fn)
-                if nn_for_eval is None:
-                    # final frame: use the trained NN instance
-                    nn_for_eval = NN
-                # build a differentiable trial function from this NN so we can compute derivatives/residual
-                y_fn = pinn.get_y_trial(x0, ics, nn_for_eval)
-                # ensure x_train requires grad for derivative computation
-                x_for_eval = x_train.detach().clone().requires_grad_(True)
-                # compute the PDE loss at each checkpoint
-                y_torch = y_fn(x_for_eval)
-                derivs = pinn.derivatives(y_torch, x_for_eval, len(ics))
-                try:
-                    res = F(x_for_eval, *derivs)
-                    pde_loss = float(torch.mean(res**2).item())
-                except Exception as e:
-                    pde_loss = None
-                y_pred = y_torch.detach().numpy()
-                # many analytic factories expect a 1-D numpy array; flatten to be safe
-                y_true = true_sol(x_np.flatten()) if true_sol is not None else None
-                if isinstance(checkpoint[0], int):
-                    title = f"Solution to {ode}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
-                    epoch_val = int(checkpoint[0])
+            if state is None:
+                return None
+            # build a fresh NN with same architecture
+            nn_copy = pinn.PINN(
+                num_hidden_layers=num_hidden_layers, 
+                layer_width=layer_width,
+                input_activation=activation,
+                hidden_activation=activation,
+                num_outputs=num_outputs
+            )
+            nn_copy.load_state_dict(state)
+            nn_copy.eval()
+            return nn_copy
+
+        # build frames from each checkpoint
+        for checkpoint in checkpoints + [("final", y_trial)]:
+            # checkpoints are pairs (epoch, intermediate solution)
+            ck_fn = checkpoint[1] 
+            nn_for_eval = _nn_from_checkpoint_fn(ck_fn)
+            if nn_for_eval is None:
+                # final frame: use the trained NN instance
+                nn_for_eval = NN
+            # build a differentiable trial function from this NN so we can compute derivatives/residual
+            y_fn = pinn.get_y_trial(x0, ics, nn_for_eval)
+            # ensure x_train requires grad for derivative computation
+            x_for_eval = x_train.detach().clone().requires_grad_(True)
+            # compute the PDE loss at each checkpoint
+            y_torch = y_fn(x_for_eval)
+            derivs = pinn.derivatives(y_torch, x_for_eval, len(ics))
+            try:
+                res = F(x_for_eval, *derivs)
+                pde_loss = float(torch.mean(res**2).item())
+            except Exception as e:
+                pde_loss = None
+            y_pred = y_torch.detach().numpy()
+            # many analytic factories expect a 1-D numpy array; flatten to be safe
+            y_true = true_sol(x_np.flatten()) if true_sol is not None else None
+            if isinstance(checkpoint[0], int):
+                title = f"Solution to {ode}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
+                epoch_val = int(checkpoint[0])
+            else:
+                if meta.get('order', 1) == 1:
+                    title = f"Final Solution to {ode}, y({x0}) = {y0}"
                 else:
-                    if meta.get('order', 1) == 1:
-                        title = f"Final Solution to {ode}, y({x0}) = {y0}"
-                    else:
-                        title = f"Final Solution to {ode}, y({x0}) = {y0}, y'({x0}) = {yprime0}"
-                    epoch_val = "final"
-                frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val, "pde_loss": pde_loss})
+                    title = f"Final Solution to {ode}, y({x0}) = {y0}, y'({x0}) = {yprime0}"
+                epoch_val = "final"
+            frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val, "pde_loss": pde_loss})
 
         st.session_state['frames'] = frames
         st.session_state['x_np'] = x_np

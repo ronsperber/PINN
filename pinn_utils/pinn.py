@@ -171,7 +171,9 @@ def solve(F: Callable,
           val_size: Union[float, int] = 0.2,
           early_stopping: Optional[dict] = None,
           return_checkpoints: bool = False,
-          checkpoint_every: int = 20
+          checkpoint_every: int = 20,
+          progress_callback: Optional[Callable[[int, float, float], None]] = None,
+          progress_every: int = 1
           ):
     """
     Use a PINN to solve an ODE
@@ -286,6 +288,16 @@ def solve(F: Callable,
         # set NN to eval for this
         NN.eval()
         val_loss = loss_fn(x_val).item()
+        # Call progress callback if provided (epoch, train_loss, val_loss)
+        if progress_callback is not None:
+            try:
+                # Only invoke callback every `progress_every` epochs to reduce UI churn,
+                # but always call on the final epoch so the UI can show completion.
+                if progress_every <= 1 or (epoch % progress_every == 0) or (epoch == epochs):
+                    progress_callback(epoch, float(epoch_loss), float(val_loss))
+            except Exception:
+                # Ensure progress callback failures don't stop training
+                pass
         # check for early stopping conditions when they exist
         if early_stopping is not None:
             if val_loss < best_val_loss:
