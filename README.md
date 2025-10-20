@@ -1,6 +1,9 @@
-This repository contains a module that is intended for using a physics informed neural network (or PINN) to solve ordinary differential equations and systems of ordinary differential equations. It also contains a streamlit app with some choices
-for the user to select a differential equation and initial condition(s), along with in some cases parameters for the equation. The app will then generate the solution the equation and produce plotly graph that includes some intermediate solutions
-along with the final solution to the equation. The ones on the app all have analytic solutions which can be seen along with what the neural network generated.
+# Physics-Informed Neural Networks for ODEs and Systems
+
+This repository contains a module for using a physics-informed neural network (PINN) to solve ordinary differential equations (ODEs) and systems of ODEs.  
+It also contains a Streamlit app that allows the user to select a differential equation, initial condition(s), and, in some cases, parameters.  
+The app then generates the solution using a neural network and displays a Plotly graph showing intermediate and final solutions.  
+Analytic solutions (where available) are shown for comparison.
 
 ### Approach
 
@@ -58,3 +61,78 @@ L(x) = \frac{1}{|X|} \sum_{x \in X} \big(F(x, y(x), y'(x), \ldots, y^{(k)}(x))\b
 $$
 
 which is the mean square residual comparing $F$ to $0$.
+
+### Contents of the repository
+
+- `pinn_utils/pinn.py`: Contains the `PINN` class and `solve` function.
+  - `PINN` creates a feed-forward neural network with input, hidden, and output layers. Activation functions can be specified per layer.
+  - `solve` trains the network to minimize the residual of a given DE, using initial conditions and the supplied `F` function.
+
+- `pinn_utils/de_sols.py`: Analytic solutions for example DEs used in the app.
+
+- `pinn_utils/ode_meta.py`: Dictionary of metadata for each DE. Includes order, parameters, `F` function, analytic solution (if available), and display information.
+
+- `stpinn.py`: Streamlit app demonstrating the solver and showing analytic solutions for comparison.
+- `test_all_desols.py`: Unit test using numeric differentiation approximation to verify that the analytic solutions are correct
+
+Example of creating a PINN for a single ODE:
+```python
+NN = pinn.PINN(
+  num_hidden_layers=3,
+  layer_width=64,
+  input_activation=nn.Tanh(),
+  hidden_activation=nn.Tanh(),
+  output_activation=nn.Identity(),
+  num_inputs=1,
+  num_outputs=1
+)
+```
+Example of solving $y' = y$, $y(0)=1$ on $[-1,1]$:
+```python
+F = lambda x, y, dy: dy - y
+a = 0
+ics = [1]
+x = torch.linspace(-1, 1, 200).reshape(-1,1)
+
+solution = pinn.solve(
+    F=F,
+    a=a,
+    ics=ics,
+    NN=NN,
+    x=x,
+    epochs=1000,
+    lr=1e-3
+)
+```
+#### Internal functions
+`get_y_trial` : generates the trial function, given $x_0$, the initial conditions, and `NN`
+
+`get_loss` : Generates the loss function using initial conditions, the neural network, and the differential equation $F$.
+
+### Running the Streamlit App
+
+You can launch the interactive Streamlit app to experiment with both single ODEs and systems of ODEs:
+
+```bash
+streamlit run stpinn.py
+```
+#### Features in the app:
+
+-Select from example differential equations or systems.
+
+-Enter initial conditions and parameters.
+
+-View the neural network solution evolving over training epochs via an animated Plotly graph.
+
+-Compare the PINN solution to the analytic solution (if available).
+
+-Adjust the time interval for the solution and network hyperparameters like number of hidden layers, layer width, activation functions, learning rate, and number of epochs.
+
+#### Notes on systems of ODEs:
+
+-For linear systems like $y' = A y$, enter the components of the matrix $A$ and the initial vector $y_0$.
+
+-The x/y plot shows the trajectory of the system in phase space.
+
+-Analytic solutions (where available) are displayed for comparison.
+
