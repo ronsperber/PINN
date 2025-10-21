@@ -437,7 +437,6 @@ if 'frames' in st.session_state:
 
     fig.frames = plotly_frames
     fig.update_layout(updatemenus=updatemenus, sliders=sliders, title=frames[final_idx]['title'])
-
     st.plotly_chart(fig, use_container_width=True)
 
     # Show PDE residuals (mean squared residual) over frames if available using Plotly
@@ -456,66 +455,7 @@ if 'frames' in st.session_state:
         if final_vals:
             st.write(f"Final PDE residual (mean): {final_vals[-1]:.6e}")
 
-    # Export controls: Prepare and Download flow to avoid transient UI issues
-    if 'png_bytes' not in st.session_state:
-        st.session_state['png_bytes'] = None
-    if 'gif_bytes' not in st.session_state:
-        st.session_state['gif_bytes'] = None
 
-    col_png, col_gif = st.columns([1, 1])
-    with col_png:
-        if st.button("Prepare final PNG"):
-            try:
-                png_bytes = fig.to_image(format='png')
-                st.session_state['png_bytes'] = png_bytes
-                st.success("PNG prepared — click Download PNG below.")
-            except Exception as e:
-                st.error(f"PNG export failed: {e}. Install the 'kaleido' package to enable Plotly PNG export.")
-
-        if st.session_state.get('png_bytes') is not None:
-            st.download_button("Download PNG", data=st.session_state['png_bytes'], file_name="pinn_final.png", mime="image/png")
-
-    with col_gif:
-        if st.button("Prepare GIF"):
-            try:
-                import io
-                from PIL import Image
-
-                imgs = []
-                frames_count = len(plotly_frames)
-                if frames_count == 0:
-                    st.error("No frames available to build GIF.")
-                else:
-                    progress = st.progress(0)
-                    est_text = st.empty()
-                    with st.spinner("Preparing GIF — rendering frames..."):
-                        # measure frames and provide a running "time left" estimate
-                        sample_times = []
-                        for idx, fr in enumerate(plotly_frames):
-                            start = time.time()
-                            temp_fig = go.Figure(data=fr.data, layout=fr.layout)
-                            png = temp_fig.to_image(format='png')
-                            img = Image.open(io.BytesIO(png)).convert('RGBA')
-                            imgs.append(img)
-                            elapsed = time.time() - start
-                            sample_times.append(elapsed)
-                            avg = sum(sample_times) / len(sample_times)
-                            frames_left = frames_count - (idx + 1)
-                            est_left = avg * frames_left
-                            est_text.text(f"Estimated time left: {est_left:.1f}s")
-                            progress.progress(int((idx + 1) / frames_count * 100))
-                        est_text.empty()
-
-                    bio = io.BytesIO()
-                    imgs[0].save(bio, format='GIF', save_all=True, append_images=imgs[1:], duration=200, loop=0)
-                    bio.seek(0)
-                    st.session_state['gif_bytes'] = bio.getvalue()
-                    st.success("GIF prepared — click Download GIF below.")
-            except Exception as e:
-                st.error(f"GIF export failed: {e}. Ensure 'kaleido' and 'Pillow' are installed for export.")
-
-        if st.session_state.get('gif_bytes') is not None:
-            st.download_button("Download GIF", data=st.session_state['gif_bytes'], file_name='pinn_evolution.gif', mime='image/gif')
 
     # Show MSE for final frame if true solution is available
     final_frame = frames[-1]
