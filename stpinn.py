@@ -441,9 +441,8 @@ if 'frames' in st.session_state:
 
     # Show PDE residuals (mean squared residual) over frames if available using Plotly
     # user-controlled toggle to show/hide residuals
-    show_residuals = st.sidebar.checkbox("Show PDE residuals", value=False)
     pde_losses = [fr.get('pde_loss') for fr in frames]
-    if show_residuals and any(pl is not None for pl in pde_losses):
+    with st.expander("Show PDE residuals", expanded = False):
         # convert None -> nan for plotting
         yvals = [pl if pl is not None else float('nan') for pl in pde_losses]
         res_fig = go.Figure()
