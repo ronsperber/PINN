@@ -75,10 +75,16 @@ which is the mean square residual comparing $F$ to $0$.
 - `stpinn.py`: Streamlit app demonstrating the solver and showing analytic solutions for comparison.
 - `test_all_desols.py`: Unit test using numeric differentiation approximation to verify that the analytic solutions are correct
 
-Example of creating a PINN for a single ODE:
+Example usage to solve $y' = y$, $y(0)=1$ on $[-1,1]$
 ```python
+# necessary imports
+import torch
+import torch.nn as nn
+from pinn_utils import pinn
+
+# create the neural network
 NN = pinn.PINN(
-  num_hidden_layers=3,
+  num_hidden_layers=2,
   layer_width=64,
   input_activation=nn.Tanh(),
   hidden_activation=nn.Tanh(),
@@ -86,14 +92,15 @@ NN = pinn.PINN(
   num_inputs=1,
   num_outputs=1
 )
-```
-Example of solving $y' = y$, $y(0)=1$ on $[-1,1]$:
-```python
-F = lambda x, y, dy: dy - y
-a = 0
-ics = [1]
-x = torch.linspace(-1, 1, 200).reshape(-1,1)
 
+# set up the differential equation and initial conditions
+# and the interval over which it will be solved
+F = lambda x, y, dy: dy - y  # Equation y'=y
+a = 0                        # x_0 = 0
+ics = [1]                    # y_0 = 1
+x = torch.linspace(-1, 1, 200).reshape(-1,1)   # interval [-1,1]
+
+# run the solver
 solution = pinn.solve(
     F=F,
     a=a,
@@ -103,6 +110,9 @@ solution = pinn.solve(
     epochs=1000,
     lr=1e-3
 )
+
+# evaluation
+y_values = solution(x)
 ```
 #### Internal functions
 `get_y_trial` : generates the trial function, given $x_0$, the initial conditions, and `NN`
