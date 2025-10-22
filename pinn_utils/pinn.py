@@ -76,9 +76,12 @@ class PINN(nn.Module):
             number of layers between output layer and input layer
         layer_width: int
             number of neurons in each layer
-        activation : Callable
-            activation function to be used on layers
-            other than the output layer
+        input_activation : Callable 
+            activation function to be used on input layer
+        hidden_activation: Callable of List of Callables
+            Activation function(s) for hidden layers
+            If a single function is provided it is applied to all layers
+            If a list is provided, it should have length equal to num_hidden_layers
         output_activation: Callable
             activation function for output layer
         num_inputs
@@ -89,6 +92,12 @@ class PINN(nn.Module):
         super(PINN, self).__init__()
         if not isinstance (hidden_activation, list):
             hidden_activation = [hidden_activation] * num_hidden_layers
+        if len(hidden_activation) != num_hidden_layers:
+            raise ValueError(
+                f"Length of hidden_activation ({len(hidden_activation)}) "
+                f"must match num_hidden_layers ({num_hidden_layers}). "
+                f"Either pass a single activation or a list of {num_hidden_layers} activations."
+                )
         self.input_activation = input_activation
         self.hidden_activation = hidden_activation
         self.input_layer = nn.Linear(num_inputs, layer_width)
