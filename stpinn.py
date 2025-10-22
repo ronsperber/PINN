@@ -77,13 +77,15 @@ with st.sidebar.expander("Neural Network Parameters", expanded=False):
     lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
     num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
     layer_width = st.number_input("Layer width", value=64, step=1)
-    activation_options = st.selectbox("Activation function", ["Softplus", "Tanh", "ReLU", "Swish"], index=0)
+    activation_options = st.selectbox("Activation function",
+                                      [ "Tanh", "Sine", "Swish", "Softplus"],
+                                      index=0)
 
 activation_dict = {
-    "Softplus": torch.nn.Softplus(),
     "Tanh": torch.nn.Tanh(),
-    "ReLU": torch.nn.ReLU(),
-    "Swish": lambda x: x * torch.sigmoid(x)
+    "Sine" : torch.sin,
+    "Swish": lambda x: x * torch.sigmoid(x),
+    "Softplus": torch.nn.Softplus()
 }
 # parameters to be passed to factories (F_factory and true_sol_factory)
 params = {
