@@ -408,7 +408,7 @@ if 'frames' in st.session_state:
                 ann_text = None
         frame_title = fr['title']
         if ann_text is not None:
-            frame_title += f"<br><sub>{ann_text.replace('<br>', ' | ')}</sub>"
+            frame_title += f"  | {ann_text.replace('<br>', ' | ')}"
         plotly_frames.append(go.Frame(data=data, name=str(i), layout=dict(title=frame_title)))
     n_frames = len(frames)
     duration_ms = max(10, min(200, int(5000 / n_frames)))
