@@ -406,18 +406,6 @@ if 'frames' in st.session_state:
                 ann_text = f"Residual: {pde_val:.3e}"
             else:
                 ann_text = None
-     
-        if ann_text is not None:
-            data.append(go.Scatter(
-                x=[x.max() * 0.95],  # Position near right edge
-                y=[fr['y_pred'].flatten().max() * 0.95],  # Position near top
-                mode='text',
-                text=[ann_text.replace('<br>', '\n')],  # Replace HTML break with newline
-                textposition='top right',
-                textfont=dict(size=12, color='black', family='Arial'),
-                showlegend=False,
-                hoverinfo='skip'
-                ))
         frame_title = fr['title']
         if ann_text is not None:
             frame_title += f"<br><sub>{ann_text.replace('<br>', ' | ')}</sub>"
