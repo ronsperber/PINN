@@ -316,14 +316,14 @@ if solve_clicked:
             y_fn = pinn.get_y_trial(x0, ics, nn_for_eval)
             # ensure x_train requires grad for derivative computation
             x_for_eval = x_train.detach().clone().requires_grad_(True)
-            # compute the PDE loss at each checkpoint
+            # compute the ODE loss at each checkpoint
             y_torch = y_fn(x_for_eval)
             derivs = pinn.derivatives(y_torch, x_for_eval, len(ics))
             try:
                 res = F(x_for_eval, *derivs)
-                pde_loss = float(torch.mean(res**2).item())
+                ode_loss = float(torch.mean(res**2).item())
             except Exception as e:
-                pde_loss = None
+                ode_loss = None
             y_pred = y_torch.detach().numpy()
             # many analytic factories expect a 1-D numpy array; flatten to be safe
             y_true = true_sol(x_np.flatten()) if true_sol is not None else None
@@ -336,7 +336,7 @@ if solve_clicked:
                 else:
                     title = f"Final Solution to {ode}, y({x0}) = {y0}, y'({x0}) = {yprime0}"
                 epoch_val = "final"
-            frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val, "pde_loss": pde_loss})
+            frames.append({"y_pred": y_pred, "y_true": y_true, "title": title, "epoch": epoch_val, "ode_loss": ode_loss})
 
         st.session_state['frames'] = frames
         st.session_state['x_np'] = x_np
@@ -395,15 +395,15 @@ if 'frames' in st.session_state:
                 data.append(go.Scatter(x=x, y=fr['y_true'].flatten()))
             mse = np.mean((fr['y_pred'].flatten() - fr['y_true'].flatten())**2)
             ann_text = f"MSE: {mse:.6f}"
-            # include PDE residual when available
-            pde_val = fr.get('pde_loss')
-            if pde_val is not None:
-                ann_text += f"<br>Residual: {pde_val:.3e}"
+            # include ODE residual when available
+            ode_val = fr.get('ode_loss')
+            if ode_val is not None:
+                ann_text += f"<br>Residual: {ode_val:.3e}"
         else:
             # no true solution; still show residual if available
-            pde_val = fr.get('pde_loss')
-            if pde_val is not None:
-                ann_text = f"Residual: {pde_val:.3e}"
+            ode_val = fr.get('ode_loss')
+            if ode_val is not None:
+                ann_text = f"Residual: {ode_val:.3e}"
             else:
                 ann_text = None
         frame_title = fr['title']
@@ -433,20 +433,20 @@ if 'frames' in st.session_state:
     fig.update_layout(updatemenus=updatemenus, sliders=sliders, title=frames[final_idx]['title'])
     st.plotly_chart(fig, use_container_width=True)
 
-    # Show PDE residuals (mean squared residual) over frames if available using Plotly
+    # Show ODE residuals (mean squared residual) over frames if available using Plotly
     # user-controlled toggle to show/hide residuals
-    pde_losses = [fr.get('pde_loss') for fr in frames]
-    with st.expander("Show PDE residuals", expanded = False):
+    ode_losses = [fr.get('ode_loss') for fr in frames]
+    with st.expander("Show ODE residuals", expanded = False):
         # convert None -> nan for plotting
-        yvals = [pl if pl is not None else float('nan') for pl in pde_losses]
+        yvals = [pl if pl is not None else float('nan') for pl in ode_losses]
         res_fig = go.Figure()
-        res_fig.add_trace(go.Scatter(x=list(range(1, len(yvals) + 1)), y=yvals, mode='lines+markers', name='PDE residual'))
-        res_fig.update_layout(title='PDE residual (per-frame)', xaxis_title='Checkpoint', yaxis_title='Mean PDE residual', template='plotly_white')
+        res_fig.add_trace(go.Scatter(x=list(range(1, len(yvals) + 1)), y=yvals, mode='lines+markers', name='ODE residual'))
+        res_fig.update_layout(title='ODE residual (per-frame)', xaxis_title='Checkpoint', yaxis_title='Mean ODE residual', template='plotly_white')
         st.plotly_chart(res_fig, use_container_width=True)
         # show final numeric value if available
-        final_vals = [v for v in pde_losses if v is not None]
+        final_vals = [v for v in ode_losses if v is not None]
         if final_vals:
-            st.write(f"Final PDE residual (mean): {final_vals[-1]:.6e}")
+            st.write(f"Final ODE residual (mean): {final_vals[-1]:.6e}")
 
 
 
