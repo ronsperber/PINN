@@ -387,7 +387,7 @@ if 'frames' in st.session_state:
             data = [go.Scatter(x=fr['y_pred'][:,0].flatten(), y=fr['y_pred'][:,1].flatten(), mode='lines', name = 'Prediction')]
         else:
             data = [go.Scatter(x=x, y=fr['y_pred'].flatten())]
-        annotations = []
+
         if fr['y_true'] is not None:
             if meta.get("is_system", False):
                 data.append(go.Scatter(x=fr['y_true'][:,0].flatten(), y=fr['y_true'][:,1].flatten(), mode='lines', name= 'True Solution', line=dict(dash='dash')))
@@ -399,25 +399,29 @@ if 'frames' in st.session_state:
             pde_val = fr.get('pde_loss')
             if pde_val is not None:
                 ann_text += f"<br>Residual: {pde_val:.3e}"
-            annotations.append(dict(
-                xref='paper', yref='paper', x=0.95, y=0.95,  # top-right corner
-                text=ann_text,
-                showarrow=False,
-                font=dict(size=12, color="black")
-            ))
         else:
             # no true solution; still show residual if available
             pde_val = fr.get('pde_loss')
             if pde_val is not None:
-                annotations.append(dict(
-                    xref='paper', yref='paper', x=0.95, y=0.95,
-                    text=f"Residual: {pde_val:.3e}",
-                    showarrow=False,
-                    font=dict(size=12, color="black")
+                ann_text = f"Residual: {pde_val:.3e}"
+            else:
+                ann_text = None
+     
+        if ann_text is not None:
+            data.append(go.Scatter(
+                x=[x.max() * 0.95],  # Position near right edge
+                y=[fr['y_pred'].flatten().max() * 0.95],  # Position near top
+                mode='text',
+                text=[ann_text.replace('<br>', '\n')],  # Replace HTML break with newline
+                textposition='top right',
+                textfont=dict(size=12, color='black', family='Arial'),
+                showlegend=False,
+                hoverinfo='skip'
                 ))
-
-        plotly_frames.append(go.Frame(data=data, name=str(i), layout=go.Layout(title=fr['title'], annotations=annotations)))
-
+        frame_title = fr['title']
+        if ann_text is not None:
+            frame_title += f"<br><sub>{ann_text.replace('<br>', ' | ')}</sub>"
+        plotly_frames.append(go.Frame(data=data, name=str(i), layout=dict(title=frame_title)))
     n_frames = len(frames)
     duration_ms = max(10, min(200, int(5000 / n_frames)))
 
