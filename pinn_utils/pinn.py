@@ -221,7 +221,7 @@ def solve(loss_fn : Callable,
     
     Returns
     solution : callable
-        the function y = taylor_polynomial(a) + (x-a)**n * NN(x-a)
+        the NN after training
         that approximates the solution
     checkpoints (optional) : List[Tuple(int,callable)]
         when return_checkpoints is true a list of pairs (epoch, solution at epoch)
@@ -341,6 +341,32 @@ def ode_solve(
         return_checkpoints : bool = False,
         **solve_args
 ):
+    """
+    Wrapper to call solve for an ODE
+    Parameters
+    ----------
+    F : Callable
+        F(x,y,y',...) which is the DE
+    a: float
+        x0 for ics
+    ics: List [float or Tensor]
+        list of y0, y_prime0, ...
+    NN: PINN
+        PINN to train to solve the DE
+    return_checkpoints : bool
+        whether or not to return intermediate solutions
+    **solve_args:
+        other arguments that can be passed directly to solve
+    
+    Returns
+    -------
+    solution: Callable
+        the solution to the ODE that's y_trial(a, ics, NN)
+    checkpoints (optional) : List[ tuple(int, callable
+        when return_checkpoints is true, a list
+        of pairs (epoch, trial) where trial is intermediate
+        solution at epoch
+    """
     loss_fn = get_loss(a, ics, NN, F)
     result = solve(
         loss_fn = loss_fn,
@@ -356,4 +382,4 @@ def ode_solve(
             trial = get_y_trial(a, ics, checkpoint[1])
             wrapped_checkpoints.append((checkpoint[0],trial))
         return solution, wrapped_checkpoints
-    return solution
+    return result
