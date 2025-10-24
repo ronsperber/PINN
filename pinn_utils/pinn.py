@@ -168,8 +168,7 @@ def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
     
     return loss
 
-def solve(F: Callable,
-          loss_fn : Optional[Callable] = None,
+def solve(loss_fn : Callable,
           NN: PINN,
           x: torch.Tensor,
           epochs: int = 5000,
@@ -334,5 +333,27 @@ def solve(F: Callable,
         return NN, checkpoints
     return NN
 
-
-
+def ode_solve(
+        F : Callable,
+        a : float,
+        ics : List[Union[float | torch.Tensor]],
+        NN : PINN,
+        return_checkpoints : bool = False,
+        **solve_args
+):
+    loss_fn = get_loss(a, ics, NN, F)
+    result = solve(
+        loss_fn = loss_fn,
+        NN = NN,
+        return_checkpoints = return_checkpoints,
+        **solve_args
+        )
+    if return_checkpoints:
+        solution = result[0]
+        checkpoints = result[1]
+        wrapped_checkpoints = []
+        for checkpoint in checkpoints:
+            trial = get_y_trial(a, ics, checkpoint[1])
+            wrapped_checkpoints.append((checkpoint[0],trial))
+        return solution, wrapped_checkpoints
+    return solution
