@@ -169,8 +169,7 @@ def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
     return loss
 
 def solve(F: Callable,
-          a : float,
-          ics: List[float | torch.Tensor],
+          loss_fn : Optional[Callable] = None,
           NN: PINN,
           x: torch.Tensor,
           epochs: int = 5000,
@@ -188,14 +187,8 @@ def solve(F: Callable,
     Use a PINN to solve an ODE
     Parameters
     ----------
-    F : callable
-        a function F(x,y,y',...y^(n)) that defines the
-        DE by F(x,y,y',...y^(n)) = 0
-    a: float
-        the value of the independent variable at which
-        the initial conditions are defined
-    ics : List[float | torch.Tensor]
-        the initial conditions y(a), y'(a),...
+    loss_fn : Optional[Callable]
+        loss function to use during training.
     NN : PINN
         a neural network of class PINN. 
         This is going to be trained to help approximate the solution
@@ -234,8 +227,6 @@ def solve(F: Callable,
     checkpoints (optional) : List[Tuple(int,callable)]
         when return_checkpoints is true a list of pairs (epoch, solution at epoch)
     """
-    # get the loss function
-    loss_fn = get_loss(a, ics, NN, F)
     # get number of points being used
     n_points = x.shape[0]
     # make sure val_size is a valid input
@@ -331,26 +322,17 @@ def solve(F: Callable,
         if return_checkpoints and epoch % checkpoint_every == 0:
             checkpoint_state = {k: v.clone() for k, v in NN.state_dict().items()}
             # create a function that uses a fresh NN with these weights
-            def y_trial(x, state=checkpoint_state):
-                # make a fresh NN instance
-                nn_copy = copy.deepcopy(NN)       # or create a new PINN instance
-                nn_copy.load_state_dict(state)
-                nn_copy.eval()
-                with torch.no_grad():
-                    return get_y_trial(a, ics, nn_copy)(x)
-            checkpoints.append((epoch, y_trial))
+            nn_copy = copy.deepcopy(NN)       # or create a new PINN instance
+            nn_copy.load_state_dict(checkpoint_state)
+            nn_copy.eval()
+            checkpoints.append((epoch, nn_copy))
 
     print(f"Final Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
     # put into eval mode after training
     NN.eval()
-    # get the solution, but use it in no_grad mode to save grad calcs
-    y_trial_grad = get_y_trial(a, ics, NN)
-    def y_trial(x):
-        with torch.no_grad():
-            return y_trial_grad(x)
     if return_checkpoints:
-        return y_trial, checkpoints
-    return y_trial
+        return NN, checkpoints
+    return NN
 
 
 
