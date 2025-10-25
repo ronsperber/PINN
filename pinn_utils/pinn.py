@@ -188,9 +188,10 @@ def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
     processed_X.append(x)
     return processed_X
 
-def train(loss_fn : Callable,
-          NN: PINN,
+def train(
+          NN: nn.Module,
           X: TensorListLike,
+          loss_fn : Callable,
           epochs: int = 5000,
           lr: float = 1e-3,
           batch_size: int | None= None,
@@ -203,16 +204,15 @@ def train(loss_fn : Callable,
           progress_every: int = 1
           ):
     """
-    Use a PINN to solve an ODE
+    trains a neural network with training data and loss function provided
     Parameters
     ----------
-    loss_fn : Callable
-        loss function to use during training.
-    NN : PINN
-        a neural network of class PINN. 
-        This is going to be trained to help approximate the solution
+    NN : nn.Module
+        a neural network of type nn.Module.  
     X : TensorListLike
         the training data
+    loss_fn : Callable
+        loss function to use during training.
     epochs : int
         number of epochs to train
     lr : float
@@ -231,7 +231,7 @@ def train(loss_fn : Callable,
         min_epochs - minimum number of epochs before considering early stopping
         patience - how many epochs without improvement on val_loss needed before stopping
     return_checkpoints: bool
-        whether or not to return intermediate solutions
+        whether or not to return intermediate solutions.
     checkpoint_every : int
         when return_checkpoints is true, how often to return a checkpoint of values
     progress_callback : Callable | None
@@ -243,6 +243,7 @@ def train(loss_fn : Callable,
     -------
     checkpoints : List[Tuple(int,callable)] | None:
         when return_checkpoints is true a list of pairs (epoch, solution at epoch)
+        otherwise returns None
     """
     
     # replace X with list of things that are all tensors
