@@ -3,9 +3,13 @@ module to create PINN for solving an ODE
 and function to use that PINN to solution
 """
 import torch
+import numpy as np, pandas as pd
 import torch.nn as nn
-from typing import List, Callable, Union, Optional
+from typing import List, Callable, TypeAlias
 import copy
+
+TensorLike: TypeAlias = torch.Tensor | np.ndarray | pd.DataFrame
+TensorListLike: TypeAlias = TensorLike | list[TensorLike] | tuple[TensorLike, ...]
 
 def factorials_up_to_n(n :int) -> torch.Tensor:
     """
@@ -64,8 +68,8 @@ class PINN(nn.Module):
     def __init__(self,
                  num_hidden_layers:int = 2,
                  layer_width:int = 64,
-                 input_activation: Callable[[torch.Tensor], torch.tensor] = nn.Tanh(),
-                 hidden_activation: Union[Callable[[torch.Tensor], torch.Tensor], List]= nn.Tanh(),
+                 input_activation: Callable[[torch.Tensor], torch.Tensor] = nn.Tanh(),
+                 hidden_activation: Callable[[torch.Tensor], torch.Tensor] | List= nn.Tanh(),
                  output_activation: Callable[[torch.Tensor], torch.Tensor] = nn.Identity(),
                  num_inputs:int = 1,
                  num_outputs:int = 1
@@ -168,37 +172,53 @@ def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
     
     return loss
 
+def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
+    # if a single type was passed, convert to a list 
+    if not isinstance(X, (list, tuple)):
+        X = [X]
+    # convert all elements of X to torch tensors
+    processed_X = []
+    for x in X:
+        if isinstance(x, pd.DataFrame):
+            x = torch.tensor(x.values, dtype=torch.float32)
+        elif isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32)
+        elif not torch.is_tensor(x):
+            raise TypeError(f"Unsupported input type: {type(x)}")
+    processed_X.append(x)
+    return processed_X
+
 def train(loss_fn : Callable,
           NN: PINN,
-          X: torch.Tensor | List[torch.Tensor],
+          X: TensorListLike,
           epochs: int = 5000,
           lr: float = 1e-3,
-          batch_size: Optional[int]= None,
+          batch_size: int | None= None,
           print_every: int = 500,
-          val_size: Union[float, int] = 0.2,
-          early_stopping: Optional[dict] = None,
+          val_size: float | int = 0.2,
+          early_stopping: int | None = None,
           return_checkpoints: bool = False,
           checkpoint_every: int = 20,
-          progress_callback: Optional[Callable[[int, float, float], None]] = None,
+          progress_callback: Callable[[int, float, float], None] |None = None,
           progress_every: int = 1
           ):
     """
     Use a PINN to solve an ODE
     Parameters
     ----------
-    loss_fn : Optional[Callable]
+    loss_fn : Callable
         loss function to use during training.
     NN : PINN
         a neural network of class PINN. 
         This is going to be trained to help approximate the solution
-    X : torch.Tensor or List[torch.Tensor]
+    X : TensorListLike
         the training data
     epochs : int
         number of epochs to train
     lr : float
         learning rate
-    batch size : Optional[int]
-        when defined, the size of batches to use during training
+    batch size : int | None
+        when not None, the size of batches to use during training
         otherwise training is done on the whole data set at once each epoch
     print_every: int
         How often to print out the current loss and validation loss
@@ -206,28 +226,31 @@ def train(loss_fn : Callable,
         what size to make the validation set. If this is an int,
         it is the absolute size of the validation set. If this is in (0,1),
         it is a relative size compared to the training set size
-    early_stopping : Optional[dict]
-        When not none, keys for whether to stop early. Keys:
+    early_stopping : dict | None
+        When not None, keys for whether to stop early. Keys:
         min_epochs - minimum number of epochs before considering early stopping
         patience - how many epochs without improvement on val_loss needed before stopping
     return_checkpoints: bool
         whether or not to return intermediate solutions
     checkpoint_every : int
         when return_checkpoints is true, how often to return a checkpoint of values
-    progress_callback : Optional[Callable]
-        when defined, is a function used to send progress to whatever is calling solve
+    progress_callback : Callable | None
+        when not None, is a function used to send progress to whatever is calling solve
     progress_every : int
         when there is a progress_callback, how often to call it
     
     Returns
-    solution : callable
-        the NN after training
-        that approximates the solution
-    checkpoints (optional) : List[Tuple(int,callable)]
+    -------
+    checkpoints : List[Tuple(int,callable)] | None:
         when return_checkpoints is true a list of pairs (epoch, solution at epoch)
     """
-    if not isinstance(X, list):
-        X = [X]
+    
+    # replace X with list of things that are all tensors
+    X = process_training_data(X)
+    # make sure all data sets have the same number of training points
+    batch_sizes = [x.shape[0] for x in X]
+    if len(set(batch_sizes)) != 1:
+        raise ValueError(f"All elements in X must have the same batch size, got {batch_sizes}")
     # get number of points being used
     data_size = X[0].shape[0]
     # make sure val_size is a valid input
@@ -288,7 +311,7 @@ def train(loss_fn : Callable,
                 end = min(i+batch_size, train_size)
                 idx = perm[i:end]
                 X_batch = [x_train[idx] for x_train in X_train]
-                loss = loss_fn(X_batch)
+                loss = loss_fn(*X_batch)
                 loss.backward()
                 epoch_loss += loss.item() * len(idx)
                 optimizer.step()
@@ -340,8 +363,8 @@ def train(loss_fn : Callable,
 def ode_solve(
         F : Callable,
         a : float,
-        ics : List[Union[float | torch.Tensor]],
-        X : torch.Tensor | List[ torch.Tensor],
+        ics : List[float | torch.Tensor],
+        X : torch.Tensor | List[torch.Tensor],
         NN : PINN,
         return_checkpoints : bool = False,
         **solve_args
