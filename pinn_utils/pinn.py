@@ -168,9 +168,9 @@ def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
     
     return loss
 
-def solve(loss_fn : Callable,
+def train(loss_fn : Callable,
           NN: PINN,
-          x: torch.Tensor,
+          X: torch.Tensor | List[torch.Tensor],
           epochs: int = 5000,
           lr: float = 1e-3,
           batch_size: Optional[int]= None,
@@ -191,8 +191,8 @@ def solve(loss_fn : Callable,
     NN : PINN
         a neural network of class PINN. 
         This is going to be trained to help approximate the solution
-    x : torch.Tensor
-        the values of x used to train the network
+    X : torch.Tensor or List[torch.Tensor]
+        the training data
     epochs : int
         number of epochs to train
     lr : float
@@ -226,29 +226,35 @@ def solve(loss_fn : Callable,
     checkpoints (optional) : List[Tuple(int,callable)]
         when return_checkpoints is true a list of pairs (epoch, solution at epoch)
     """
+    if not isinstance(X, list):
+        X = [X]
     # get number of points being used
-    n_points = x.shape[0]
+    data_size = X[0].shape[0]
     # make sure val_size is a valid input
     if isinstance(val_size, int):
-        if val_size <=0 or val_size >= n_points:
+        if val_size <=0 or val_size >= data_size:
             raise ValueError("Not a valid validation size")
     elif isinstance(val_size, float):
         if val_size <=0 or val_size >= 1:
             raise ValueError("Not a valid validation size")
         else:
             # when it's a float get the actual size of the validation set
-            val_size = int(n_points * val_size)
+            val_size = int(data_size * val_size)
     else:
         raise TypeError("Validation size must be int or float")
     # get rid of requires_grad on x if true so it can be split
-    if x.requires_grad:
-        x = x.detach().clone().requires_grad_(False)
+    for i,x in enumerate(X):
+        if x.requires_grad:
+            X[i] = x.detach().clone().requires_grad_(False)
     # generate train/validation split based on val_size
-    perm = torch.randperm(n_points)
-    x_val = x[perm[:val_size]].requires_grad_(True)
-    x_train = x[perm[val_size:]].requires_grad_(True)
-    checkpoints = []
-    n_train = x_train.shape[0]
+    perm = torch.randperm(data_size)
+    X_val = [x[perm[:val_size]].requires_grad_(True) for x in X]
+    X_train = [x[perm[val_size:]].requires_grad_(True) for x in X]
+    if return_checkpoints:
+        checkpoints = []
+    else:
+        checkpoints = None
+    train_size = X_train[0].shape[0]
     # when there's early stopping get min_epochs, patience
     # and set up best loss and epochs since best
     if early_stopping is not None:
@@ -267,30 +273,30 @@ def solve(loss_fn : Callable,
             # when no batching exists reset optimizer
             # compute loss and do backpropogation
             optimizer.zero_grad()
-            loss = loss_fn(x_train)
+            loss = loss_fn(*X_train)
             loss.backward()
             epoch_loss = loss.item()
             optimizer.step()
         else:
             # shuffle every epoch to get new batches
-            perm = torch.randperm(n_train)
+            perm = torch.randperm(train_size)
             epoch_loss = 0.0
             # loop over the batches and compute average loss
             # each batch run backpropogation
-            for i in range(0, n_train, batch_size):
+            for i in range(0, train_size, batch_size):
                 optimizer.zero_grad()
-                end = min(i+batch_size, n_train)
+                end = min(i+batch_size, train_size)
                 idx = perm[i:end]
-                x_batch = x_train[idx]
-                loss = loss_fn(x_batch)
+                X_batch = [x_train[idx] for x_train in X_train]
+                loss = loss_fn(X_batch)
                 loss.backward()
                 epoch_loss += loss.item() * len(idx)
                 optimizer.step()
-            epoch_loss /= n_train
+            epoch_loss /= train_size
         # compute loss on validation set
         # set NN to eval for this
         NN.eval()
-        val_loss = loss_fn(x_val).item()
+        val_loss = loss_fn(*X_val).item()
         # Call progress callback if provided (epoch, train_loss, val_loss)
         if progress_callback is not None:
             try:
@@ -329,14 +335,13 @@ def solve(loss_fn : Callable,
     print(f"Final Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
     # put into eval mode after training
     NN.eval()
-    if return_checkpoints:
-        return NN, checkpoints
-    return NN
+    return checkpoints
 
 def ode_solve(
         F : Callable,
         a : float,
         ics : List[Union[float | torch.Tensor]],
+        X : torch.Tensor | List[ torch.Tensor],
         NN : PINN,
         return_checkpoints : bool = False,
         **solve_args
@@ -351,6 +356,8 @@ def ode_solve(
         x0 for ics
     ics: List [float or Tensor]
         list of y0, y_prime0, ...
+    X : torch.Tensor or list[torch.Tensor]
+        training data
     NN: PINN
         PINN to train to solve the DE
     return_checkpoints : bool
@@ -368,18 +375,18 @@ def ode_solve(
         solution at epoch
     """
     loss_fn = get_loss(a, ics, NN, F)
-    result = solve(
+    checkpoints = train(
         loss_fn = loss_fn,
         NN = NN,
+        X = X,
         return_checkpoints = return_checkpoints,
         **solve_args
         )
+    result = get_y_trial(a, ics, NN)
     if return_checkpoints:
-        solution = result[0]
-        checkpoints = result[1]
         wrapped_checkpoints = []
         for checkpoint in checkpoints:
             trial = get_y_trial(a, ics, checkpoint[1])
-            wrapped_checkpoints.append((checkpoint[0],trial))
-        return solution, wrapped_checkpoints
+        wrapped_checkpoints.append((checkpoint[0],trial))
+        return result, wrapped_checkpoints
     return result

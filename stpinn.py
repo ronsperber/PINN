@@ -262,12 +262,12 @@ if solve_clicked:
             progress_text.text(f"Epoch {epoch}/{epochs} — train_loss: {train_loss:.6e}, val_loss: {val_loss:.6e} — ETA: {eta_str}")
 
         with st.spinner("Solving..."):
-            y_trial, checkpoints = pinn.ode_solve(F,
-                                              x0,
-                                              ics,
-                                              NN,
+            y_trial, checkpoints = pinn.ode_solve(F=F,
+                                              a=x0,
+                                              ics=ics,
+                                              NN=NN,
                                               return_checkpoints=True,
-                                              x=x_train,
+                                              X=x_train,
                                               epochs=epochs,
                                               val_size=0.1, 
                                               lr=lr,
