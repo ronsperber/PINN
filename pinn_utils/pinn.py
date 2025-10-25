@@ -411,6 +411,6 @@ def ode_solve(
         wrapped_checkpoints = []
         for checkpoint in checkpoints:
             trial = get_y_trial(a, ics, checkpoint[1])
-        wrapped_checkpoints.append((checkpoint[0],trial))
+            wrapped_checkpoints.append((checkpoint[0],trial))
         return result, wrapped_checkpoints
     return result

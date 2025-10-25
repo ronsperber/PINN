@@ -277,7 +277,7 @@ if solve_clicked:
         # clear progress UI
         progress_bar.empty()
         progress_text.empty()
-
+    
         # Build frames (prediction, optional true) and store in session_state
         x_np = x_train.detach().numpy()
         frames = []
