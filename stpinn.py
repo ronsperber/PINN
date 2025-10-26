@@ -1,5 +1,6 @@
 import streamlit as st
 import importlib
+import pandas as pd
 import torch
 import numpy as np
 import plotly.graph_objects as go
@@ -263,23 +264,22 @@ if solve_clicked:
 
         with st.spinner("Solving..."):
             y_trial, checkpoints = pinn.ode_solve(F=F,
-                                              a=x0,
-                                              ics=ics,
-                                              NN=NN,
-                                              return_checkpoints=True,
-                                              X=x_train,
-                                              epochs=epochs,
-                                              val_size=0.1, 
-                                              lr=lr,
-                                              progress_callback=_progress_callback,
-                                              progress_every=10)
+                                                  a=x0,
+                                                  ics=ics,
+                                                  NN=NN,
+                                                  return_checkpoints=True,
+                                                  X=x_train,
+                                                  epochs=epochs,
+                                                  val_size=0.1, 
+                                                  lr=lr,
+                                                  progress_callback=_progress_callback,
+                                                  progress_every=10)
 
         # clear progress UI
         progress_bar.empty()
         progress_text.empty()
-    
-        # Build frames (prediction, optional true) and store in session_state
         x_np = x_train.detach().numpy()
+        # Build frames (prediction, optional true) and store in session_state
         frames = []
         # helper to reconstruct a NN from checkpoint state (if provided)
         def _nn_from_checkpoint_fn(ck_fn):

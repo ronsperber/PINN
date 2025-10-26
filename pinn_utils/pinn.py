@@ -398,19 +398,38 @@ def ode_solve(
         of pairs (epoch, trial) where trial is intermediate
         solution at epoch
     """
+
     loss_fn = get_loss(a, ics, NN, F)
-    checkpoints = train(
-        loss_fn = loss_fn,
-        NN = NN,
-        X = X,
-        return_checkpoints = return_checkpoints,
+    
+    # Run the generic training loop
+    result = train(
+        NN=NN,
+        X=X,
+        loss_fn=loss_fn,
+        return_checkpoints=return_checkpoints,
         **solve_args
-        )
-    result = get_y_trial(a, ics, NN)
+    )
+
+    # Wrap checkpoints so each stores only state_dict
+    wrapped_checkpoints = None
     if return_checkpoints:
+        checkpoints = result  # train returns the raw checkpoints
         wrapped_checkpoints = []
-        for checkpoint in checkpoints:
-            trial = get_y_trial(a, ics, checkpoint[1])
-            wrapped_checkpoints.append((checkpoint[0],trial))
-        return result, wrapped_checkpoints
-    return result
+        for epoch, nn_checkpoint in checkpoints:
+            # copy state_dict so we don't mutate the original network
+            state = {k: v.clone() for k, v in nn_checkpoint.state_dict().items()}
+
+            # closure capturing the state dict
+            def trial(x, state=state):
+                nn_copy = copy.deepcopy(NN)  # fresh network of same architecture
+                nn_copy.load_state_dict(state)
+                nn_copy.eval()
+                with torch.no_grad():
+                    return get_y_trial(a, ics, nn_copy)(x)
+
+            wrapped_checkpoints.append((epoch, trial))
+
+    solution = get_y_trial(a, ics, NN)
+    if return_checkpoints:
+        return solution, wrapped_checkpoints
+    return solution
