@@ -7,7 +7,7 @@ Analytic solutions (where available) are shown for comparison.
 
 ### Approach
 
-The idea here is that we create a collection of points in the interval that we want the solution generated for. We then use the differential equation to define a loss function.  
+The approach begins by sampling points within the target interval for which we want to approximate the solution.
 
 More specifically, suppose we have the initial value problem:
 
@@ -25,7 +25,7 @@ $$
 y = \sum_{n=0}^{k-1} \frac{y^{(n)}(x_0)(x - x_0)^n}{n!} + (x - x_0)^k  NN(x - x_0)
 $$
 
-This is modeling the idea that if the solution is analytic at $x_0$, we can write:
+This construction is motivated by the fact that if the true solution is analytic at $x_0$, it admits a Taylor series expansion:
 
 $$
 y = \sum_{n=0}^{\infty} \frac{y^{(n)}(x_0)}{n!}(x - x_0)^n
@@ -61,14 +61,14 @@ L(x) = \frac{1}{|X|} \sum_{x \in X} \big(F(x, y(x), y'(x), \ldots, y^{(k)}(x))\b
 $$
 
 which is the mean square residual comparing $F$ to $0$.
+This approach automatically enforces the initial conditions exactly, leaving the network free to learn only the behavior constrained by the differential equation itself.
 
 ### Contents of the repository
 
 - `pinn_utils/pinn.py`: Contains the `PINN` class and `solve` function.
   - `PINN` creates a feed-forward neural network with input, hidden, and output layers. Activation functions can be specified per layer.
   - `ode_solve` trains the network to minimize the residual of a given DE, using initial conditions and the supplied `F` function.
-  - `train` is used to take any neural network along with 1 or more datasets and a loss function and train the network based on that.
-
+  - `train` is a generic utility that can train any PyTorch network on one or more datasets using a supplied loss function — similar to `model.fit()` in Keras, but with full PyTorch flexibility
 - `pinn_utils/de_sols.py`: Analytic solutions for example DEs used in the app.
 
 - `pinn_utils/ode_meta.py`: Dictionary of metadata for each DE. Includes order, parameters, `F` function, analytic solution (if available), and display information.
@@ -129,7 +129,7 @@ pip install -r requirements.txt
 streamlit run stpinn.py
 ```
 
-You can access the app already on [streamlit cloud](http://pinnsolver.streamlit.app)
+You can access the app already on [Streamlit Cloud](https://pinnsolver.streamlit.app)
 #### Features in the app:
 
 -Select from example differential equations or systems.
