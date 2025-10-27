@@ -217,7 +217,7 @@ def train(
         number of epochs to train
     lr : float
         learning rate
-    batch size : int | None
+    batch_size : int | None
         when not None, the size of batches to use during training
         otherwise training is done on the whole data set at once each epoch
     print_every: int
