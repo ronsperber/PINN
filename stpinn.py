@@ -72,12 +72,12 @@ else:
         x_end = st.sidebar.number_input("x end", value=x_start + 2.0, min_value=x_start - EPS, key="x_end_default")
 # add optional parameters for the Neural network to potentially improve training
 with st.sidebar.expander("Neural Network Parameters", expanded=False):
-    st.caption("Tweak only if the solver struggles or you want to experiment.")
-    n_points = st.number_input("Number of points in interval", value=100, step=10)
-    epochs = st.number_input("Epochs", value=500, step=100)
+    st.caption("Tweak only if the solver struggles or you want to experiment. Choosing very large values for epochs, number of hidden layers, and/or layer width could make the solver slow.")
+    n_points = st.number_input("Number of points in interval", min_value= 10, value=100, step=10)
+    epochs = st.number_input("Epochs", value=500, step=100,min_value=10,max_value=10000)
     lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
     num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
-    layer_width = st.number_input("Layer width", value=64, step=1)
+    layer_width = st.number_input("Layer width", value=64, step=1,min_value=2,max_value=1024)
     activation_options = st.selectbox("Activation function",
                                       [ "Tanh", "Sine", "Swish", "Softplus"],
                                       index=0)
