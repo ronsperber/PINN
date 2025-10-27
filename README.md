@@ -66,7 +66,8 @@ which is the mean square residual comparing $F$ to $0$.
 
 - `pinn_utils/pinn.py`: Contains the `PINN` class and `solve` function.
   - `PINN` creates a feed-forward neural network with input, hidden, and output layers. Activation functions can be specified per layer.
-  - `solve` trains the network to minimize the residual of a given DE, using initial conditions and the supplied `F` function.
+  - `ode_solve` trains the network to minimize the residual of a given DE, using initial conditions and the supplied `F` function.
+  - `train` is used to take any neural network along with 1 or more datasets and a loss function and train the network based on that.
 
 - `pinn_utils/de_sols.py`: Analytic solutions for example DEs used in the app.
 
@@ -101,12 +102,12 @@ ics = [1]                    # y_0 = 1
 x = torch.linspace(-1, 1, 200).reshape(-1,1)   # interval [-1,1]
 
 # run the solver
-solution = pinn.solve(
+solution = pinn.ode_solve(
     F=F,
     a=a,
     ics=ics,
     NN=NN,
-    x=x,
+    X=x,
     epochs=1000,
     lr=1e-3
 )
@@ -124,8 +125,11 @@ y_values = solution(x)
 You can launch the interactive Streamlit app to experiment with both single ODEs and systems of ODEs:
 
 ```bash
+pip install -r requirements.txt
 streamlit run stpinn.py
 ```
+
+You can access the app already on [streamlit cloud](http://pinnsolver.streamlit.app)
 #### Features in the app:
 
 -Select from example differential equations or systems.
