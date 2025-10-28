@@ -24,21 +24,24 @@ def test_trig_exponential():
     # f(x) = exp(x0 * sin(x1))
     def f(x):
         return torch.exp(x[:,0] * torch.sin(x[:,1])).unsqueeze(-1)
-    x = torch.tensor([[1, math.pi /6]])
-    derivs = compute_unique_derivatives(f, x, order=2)
-    # analytics checks
-    y_expected = math.exp(math.sin(math.pi / 6))
+    x = torch.tensor([[1, math.pi / 6]], requires_grad=True)
+    derivs = compute_unique_derivatives(f, x, order=2)[0]
+
+    # Analytic checks
+    y_expected = math.exp(math.sin(math.pi / 6)) 
     dx0 = y_expected * math.sin(math.pi / 6)
     dx1 = y_expected * math.cos(math.pi / 6)
-    dx0_x0 = y_expected * math.sin(math.pi / 6) ** 2
-    dx1_x1 = y_expected * math.cos(math.pi / 6) ** 2
-    dx0_x1 = y_expected * math.cos(math.pi / 6) * math.sin(math.pi / 6)
+    dx0_dx0 = y_expected * (math.sin(math.pi / 6) ** 2)
+    dx1_dx1 = y_expected * ((math.cos(math.pi / 6) ** 2) - math.sin(math.pi / 6) )
+    dx0_dx1 = y_expected * math.cos(math.pi / 6) * (1 + math.sin(math.pi / 6))
+
     assert_close(derivs["y"], torch.tensor([y_expected]))
     assert_close(derivs["x0"], torch.tensor([dx0]))
     assert_close(derivs["x1"], torch.tensor([dx1]))
     assert_close(derivs["x0_x0"], torch.tensor([dx0_dx0]), rtol=1e-6, atol=1e-6)
     assert_close(derivs["x1_x1"], torch.tensor([dx1_dx1]), rtol=1e-6, atol=1e-6)
     assert_close(derivs["x0_x1"], torch.tensor([dx0_dx1]), rtol=1e-6, atol=1e-6)
+
 
 def test_trig_function():
     # f(x) = sin(x0) * cos(x1)
@@ -84,9 +87,41 @@ def test_multiple_outputs():
     assert_close(d1["x1_x1"], torch.tensor([18.0]))
     assert_close(d1["x0"], torch.tensor([0.0]))
 
+def test_third_order_polynomial():
+    def f(x):
+        return (x[:,0]**3 * x[:,1] + x[:,0] * x[:,1]**2).unsqueeze(-1)
+
+    x = torch.tensor([[2.0, 1.0]], requires_grad=True)
+    derivs = compute_unique_derivatives(f, x, order=3)[0]
+
+    # Analytic values at x=2, y=1
+    y_expected = 2**3 * 1.0 + 2*1**2  # 8 + 2 = 10
+    dx0 = 3*2**2 * 1.0 + 1**2        # 12 + 1 = 13
+    dx1 = 2**3 + 2*2*1.0              # 8 + 4 = 12
+    dx0_dx0 = 6*2*1.0                  # 12
+    dx1_dx1 = 2*2.0                     # 4
+    dx0_dx1 = 3*2**2 + 2*1.0            # 12 + 2 = 14
+    dx0_dx0_dx0 = 6*1.0                  # 6
+    dx0_dx0_dx1 = 6*2.0                  # 12
+    dx0_dx1_dx1 = 2.0                     # 2
+    dx1_dx1_dx1 = 0.0                     # 0
+
+    assert_close(derivs["y"], torch.tensor([y_expected]))
+    assert_close(derivs["x0"], torch.tensor([dx0]))
+    assert_close(derivs["x1"], torch.tensor([dx1]))
+    assert_close(derivs["x0_x0"], torch.tensor([dx0_dx0]))
+    assert_close(derivs["x1_x1"], torch.tensor([dx1_dx1]))
+    assert_close(derivs["x0_x1"], torch.tensor([dx0_dx1]))
+    assert_close(derivs["x0_x0_x0"], torch.tensor([dx0_dx0_dx0]))
+    assert_close(derivs["x0_x0_x1"], torch.tensor([dx0_dx0_dx1]))
+    assert_close(derivs["x0_x1_x1"], torch.tensor([dx0_dx1_dx1]))
+    assert_close(derivs["x1_x1_x1"], torch.tensor([dx1_dx1_dx1]))
+
 
 if __name__ == "__main__":
     test_simple_polynomial()
     test_trig_function()
+    test_trig_exponential()
     test_multiple_outputs()
+    test_third_order_polynomial()
     print("✅ All derivative tests passed.")
