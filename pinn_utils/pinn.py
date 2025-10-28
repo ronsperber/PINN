@@ -5,6 +5,7 @@ and function to use that PINN to solution
 import torch
 import numpy as np, pandas as pd
 import torch.nn as nn
+from itertools import combinations_with_replacement
 from typing import List, Callable, TypeAlias
 import copy
 
@@ -157,6 +158,64 @@ def derivatives(y: torch.Tensor, x: torch.Tensor, order: int) -> List[torch.Tens
         derivs.append(dy_dx)
     
     return derivs  # [y, y', y'', ..., y^(order)]
+
+
+def compute_unique_derivatives(NN, x, order=2):
+    """
+    Compute all unique derivatives of each NN output up to a given order.
+    Mixed partials are treated as equal (∂²/∂x∂y = ∂²/∂y∂x).
+
+    Args:
+        NN: neural network mapping x -> y (can have multiple outputs)
+        x: torch.Tensor of shape (batch_size, num_inputs), requires_grad=True
+        order: max derivative order (integer)
+
+    Returns:
+        derivs_per_output: list of dicts, one per output
+            Each dict maps derivative name -> tensor (batch_size,)
+    """
+    batch_size, num_inputs = x.shape
+    y = NN(x)
+    if y.ndim == 1:
+        y = y.unsqueeze(-1)
+    num_outputs = y.shape[1]
+
+    derivs_per_output = []
+
+    for j in range(num_outputs):
+        yj = y[:, j]
+        deriv_dict = {'y': yj}
+
+        # Compute and store first-order derivatives
+        first_order = [torch.autograd.grad(
+            yj, x, grad_outputs=torch.ones_like(yj),
+            create_graph=True, retain_graph=True
+        )[0][:, i] for i in range(num_inputs)]
+        for i, grad in enumerate(first_order):
+            deriv_dict[f"x{i}"] = grad
+
+        # Store for recursive construction
+        prev_derivs = { (i,): first_order[i] for i in range(num_inputs) }
+
+        # Higher-order derivatives
+        for ord in range(2, order + 1):
+            new_derivs = {}
+            for combo in combinations_with_replacement(range(num_inputs), ord):
+                shorter = combo[:-1]
+                last = combo[-1]
+                grad_prev = prev_derivs[shorter]
+                grad = torch.autograd.grad(
+                    grad_prev, x, grad_outputs=torch.ones_like(grad_prev),
+                    create_graph=True, retain_graph=True
+                )[0][:, last]
+                name = "_".join(f"x{i}" for i in combo)
+                deriv_dict[name] = grad
+                new_derivs[combo] = grad
+            prev_derivs = new_derivs
+
+        derivs_per_output.append(deriv_dict)
+
+    return derivs_per_output
 
 def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
     """
