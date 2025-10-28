@@ -244,7 +244,7 @@ def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
             x = torch.tensor(x, dtype=torch.float32)
         elif not torch.is_tensor(x):
             raise TypeError(f"Unsupported input type: {type(x)}")
-    processed_X.append(x)
+        processed_X.append(x)
     return processed_X
 
 def train(
@@ -255,6 +255,7 @@ def train(
           lr: float = 1e-3,
           batch_size: int | None= None,
           print_every: int = 500,
+          use_val: bool = True,
           val_size: float | int = 0.2,
           early_stopping: int | None = None,
           return_checkpoints: bool = False,
@@ -281,6 +282,8 @@ def train(
         otherwise training is done on the whole data set at once each epoch
     print_every: int
         How often to print out the current loss and validation loss
+    use_val : bool
+        whether or not to split into train/validation sets
     val_size: int | float
         what size to make the validation set. If this is an int,
         it is the absolute size of the validation set. If this is in (0,1),
@@ -308,31 +311,36 @@ def train(
     # replace X with list of things that are all tensors
     X = process_training_data(X)
     # make sure all data sets have the same number of training points
-    batch_sizes = [x.shape[0] for x in X]
-    if len(set(batch_sizes)) != 1:
-        raise ValueError(f"All elements in X must have the same batch size, got {batch_sizes}")
-    # get number of points being used
-    data_size = X[0].shape[0]
-    # make sure val_size is a valid input
-    if isinstance(val_size, int):
-        if val_size <=0 or val_size >= data_size:
-            raise ValueError("Not a valid validation size")
-    elif isinstance(val_size, float):
-        if val_size <=0 or val_size >= 1:
-            raise ValueError("Not a valid validation size")
+    if use_val:
+        batch_sizes = [x.shape[0] for x in X]
+        if len(set(batch_sizes)) != 1:
+            raise ValueError(f"All elements in X must have the same batch size, got {batch_sizes}")
+        # get number of points being used
+        data_size = X[0].shape[0]
+        # make sure val_size is a valid input
+        if isinstance(val_size, int):
+            if val_size <=0 or val_size >= data_size:
+                raise ValueError("Not a valid validation size")
+        elif isinstance(val_size, float):
+            if val_size <=0 or val_size >= 1:
+                raise ValueError("Not a valid validation size")
+            else:
+                # when it's a float get the actual size of the validation set
+                val_size = int(data_size * val_size)
         else:
-            # when it's a float get the actual size of the validation set
-            val_size = int(data_size * val_size)
+            raise TypeError("Validation size must be int or float")
+        # get rid of requires_grad on x if true so it can be split
+        for i,x in enumerate(X):
+            if x.requires_grad:
+                X[i] = x.detach().clone().requires_grad_(False)
+        # generate train/validation split based on val_size
+        perm = torch.randperm(data_size)
+        X_val = [x[perm[:val_size]].requires_grad_(True) for x in X]
+        X_train = [x[perm[val_size:]].requires_grad_(True) for x in X]
+        print(len(X_val), len(X_train))
     else:
-        raise TypeError("Validation size must be int or float")
-    # get rid of requires_grad on x if true so it can be split
-    for i,x in enumerate(X):
-        if x.requires_grad:
-            X[i] = x.detach().clone().requires_grad_(False)
-    # generate train/validation split based on val_size
-    perm = torch.randperm(data_size)
-    X_val = [x[perm[:val_size]].requires_grad_(True) for x in X]
-    X_train = [x[perm[val_size:]].requires_grad_(True) for x in X]
+        X_train =[x.requires_grad_(True) for x in X]
+        X_val = None
     if return_checkpoints:
         checkpoints = []
     else:
@@ -379,7 +387,10 @@ def train(
         # compute loss on validation set
         # set NN to eval for this
         NN.eval()
-        val_loss = loss_fn(*X_val).item()
+        if use_val:
+            val_loss = loss_fn(*X_val).item()
+        else:
+            val_loss = float('nan')
         # Call progress callback if provided (epoch, train_loss, val_loss)
         if progress_callback is not None:
             try:
@@ -391,17 +402,18 @@ def train(
                 # Ensure progress callback failures don't stop training
                 pass
         # check for early stopping conditions when they exist
-        if early_stopping is not None:
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                epochs_since_best = 0
-                best_weights = {k: v.clone().detach() for k, v in NN.state_dict().items()}
-            else:
-                epochs_since_best += 1
-            if epochs_since_best >= patience and epoch >= min_epochs:
-                print(f"Early stopping at epoch {epoch}, validation loss did not improve for {early_stopping['patience']} epochs")
-                NN.load_state_dict(best_weights)
-                break
+        if use_val:
+            if early_stopping is not None:
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    epochs_since_best = 0
+                    best_weights = {k: v.clone().detach() for k, v in NN.state_dict().items()}
+                else:
+                    epochs_since_best += 1
+                if epochs_since_best >= patience and epoch >= min_epochs:
+                    print(f"Early stopping at epoch {epoch}, validation loss did not improve for {early_stopping['patience']} epochs")
+                    NN.load_state_dict(best_weights)
+                    break
         # put back into training
         NN.train()
         if epoch % print_every == 0:
