@@ -439,7 +439,7 @@ def ode_solve(
         X : torch.Tensor | List[torch.Tensor],
         NN : PINN,
         return_checkpoints : bool = False,
-        **solve_args
+        **solve_args : dict
 ):
     """
     Wrapper to call solve for an ODE
@@ -457,7 +457,7 @@ def ode_solve(
         PINN to train to solve the DE
     return_checkpoints : bool
         whether or not to return intermediate solutions
-    **solve_args:
+    **solve_args: dict
         other arguments that can be passed directly to solve
     
     Returns
@@ -572,3 +572,59 @@ def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=No
     # attach expected_keys for consistency
     loss_fn.expected_keys = expected_keys
     return loss_fn
+
+def pde_solve(
+        DE : Callable,
+        X_DE : torch.Tensor,
+        NN : PINN,
+        IC_list : List[tuple] | None = None,
+        BC_list : List[tuple] | None = None,
+        DE_params : dict | None = None,
+        **train_params : dict
+        
+):
+    """
+    Given a differential equation, a region, a PINN, a list of ICs and list of BCS,
+    and a dictionary of any parameters for the DE, train the PINN to get a solution
+    to the PDE
+    Parameters
+    ----------
+    DE : Callable
+        partial differential equation that we're trying to solve
+    X_DE : torch.Tensor
+        region on which the differential equation should hold
+    IC_list : List[tuple] | None, optional
+        Each tuple is (X_ic, u_ic, weight) where:
+            X_ic : tensor of IC points
+            u_ic : callable or tensor for target IC values
+            weight : optional float (defaults to 1.0)
+    BC_list : List[tuple] | None, optional
+        Each tuple is (X_bc, u_bc, weight) with the same semantics as IC_list
+    DE_params : dict | None, optional
+        any additional arguments expected by the DE function (e.g. {"alpha": 0.1})
+    train_params : dict
+        any additional parameters to be passed to train()
+    """
+    # first get the loss function for this PDE
+    loss_fn = get_pde_loss(
+        NN=NN,
+        de_eq=DE,
+        ic_conditions=IC_list,
+        bc_conditions=BC_list,
+        DE_params=DE_params
+    )
+    # create the list of tensors for X to be passed to train()
+    X = [X_DE] # start with the set for the DE
+    for ic in IC_list:
+        X.append(ic[0]) # add the IC training sets
+    for bc in BC_list:
+        X.append(bc[0]) # add the BC training sets
+    # train the neural network
+    train(
+        NN=NN,
+        loss_fn=loss_fn,
+        X=X,
+        use_val=False,
+        **train_params
+    )
+    return NN
