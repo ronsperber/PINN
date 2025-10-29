@@ -504,3 +504,71 @@ def ode_solve(
     if return_checkpoints:
         return solution, wrapped_checkpoints
     return solution
+
+def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=None):
+    """
+    Returns a loss function compatible with your `train()` loop.
+
+    Parameters
+    ----------
+    NN : nn.Module
+        The neural network model.
+    de_eq : Callable[[nn.Module, torch.Tensor], torch.Tensor]
+        PDE residual function (e.g. lambda NN, x: u_t - alpha * u_xx).
+    ic_conditions : list of tuples | None
+        Each tuple is (X_ic, u_ic, weight) where:
+            X_ic : tensor of IC points
+            u_ic : callable or tensor for target IC values
+            weight : optional float (defaults to 1.0)
+    bc_conditions : list of tuples | None
+        Each tuple is (X_bc, u_bc, weight) with same semantics.
+    DE_params : dict | None
+        Optional PDE parameters (passed to `de_eq` if needed).
+
+    Returns
+    -------
+    loss_fn : Callable
+        A function that can be passed directly to `train()`.
+    """
+
+    # record what argument order this loss expects
+    expected_keys = ["de"]
+    if ic_conditions is not None:
+        expected_keys.append("ic")
+    if bc_conditions is not None:
+        expected_keys.append("bc")
+
+    def loss_fn(*X_sets):
+        idx = 0
+        total_loss = 0.0
+
+        # PDE residual
+        X_de = X_sets[idx]
+        idx += 1
+        de_residual = de_eq(NN, X_de) if DE_params is None else de_eq(NN, X_de, **DE_params)
+        total_loss += torch.mean(de_residual**2)
+
+        # Initial conditions
+        if ic_conditions is not None:
+            for (X_ic, u_ic, *maybe_weight) in ic_conditions:
+                weight = maybe_weight[0] if maybe_weight else 1.0
+                u_pred = NN(X_ic)
+                u_true = u_ic(X_ic) if callable(u_ic) else u_ic
+                # print(u_pred.shape, u_true.shape)
+                total_loss += weight * torch.mean((u_pred - u_true)**2)
+            idx += 1
+
+        # Boundary conditions
+        if bc_conditions is not None:
+            for (X_bc, u_bc, *maybe_weight) in bc_conditions:
+                weight = maybe_weight[0] if maybe_weight else 1.0
+                u_pred = NN(X_bc)
+                u_true = u_bc(X_bc) if callable(u_bc) else u_bc
+                total_loss += weight * torch.mean((u_pred - u_true)**2)
+            idx += 1
+
+        return total_loss
+
+    # attach expected_keys for consistency
+    loss_fn.expected_keys = expected_keys
+    return loss_fn
