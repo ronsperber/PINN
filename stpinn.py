@@ -20,6 +20,7 @@ with st.expander("Expand to see the mathematics behind this method.", expanded=F
     st.markdown(math_md)
 # Sidebar inputs driven by ODES metadata
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
+make_gif = st.sidebar.checkbox("Create a GIF from the frames produced", value=False)
 meta = ODES[ode_choice]
 if meta.get("is_system", False):
     # System inputs
@@ -142,11 +143,18 @@ current_params = dict(
     lr=float(lr),
     num_hidden_layers=int(num_hidden_layers),
     layer_width=int(layer_width),
-    activation=activation
+    activation=activation_options
     )
 if 'last_params' not in st.session_state:
     st.session_state['last_params'] = current_params
 elif st.session_state['last_params'] != current_params:
+    print("=== Parameter differences detected ===")
+    for key in current_params:
+        old_val = st.session_state['last_params'].get(key)
+        new_val = current_params.get(key)
+        if old_val != new_val:
+            print(f"{key}: old={old_val} | new={new_val}")
+    print("====================================")
     # user changed parameters — clear any previously computed frames so chart doesn't persist
     st.session_state.pop('frames', None)
     st.session_state.pop('x_np', None)
@@ -279,6 +287,7 @@ if solve_clicked:
         progress_bar.empty()
         progress_text.empty()
         x_np = x_train.detach().numpy()
+        st.session_state["x_np"] = x_np.flatten()
         # Build frames (prediction, optional true) and store in session_state
         frames = []
         # helper to reconstruct a NN from checkpoint state (if provided)
@@ -386,13 +395,13 @@ if 'frames' in st.session_state:
         if meta.get("is_system", False):
             data = [go.Scatter(x=fr['y_pred'][:,0].flatten(), y=fr['y_pred'][:,1].flatten(), mode='lines', name = 'Prediction')]
         else:
-            data = [go.Scatter(x=x, y=fr['y_pred'].flatten())]
+            data = [go.Scatter(x=x, y=fr['y_pred'].flatten(),mode='lines', name='Prediction')]
 
         if fr['y_true'] is not None:
             if meta.get("is_system", False):
                 data.append(go.Scatter(x=fr['y_true'][:,0].flatten(), y=fr['y_true'][:,1].flatten(), mode='lines', name= 'True Solution', line=dict(dash='dash')))
             else:
-                data.append(go.Scatter(x=x, y=fr['y_true'].flatten()))
+                data.append(go.Scatter(x=x, y=fr['y_true'].flatten(), mode='lines', name='True Solution', line=dict(dash='dash')))
             mse = np.mean((fr['y_pred'].flatten() - fr['y_true'].flatten())**2)
             ann_text = f"MSE: {mse:.6f}"
             # include ODE residual when available
@@ -412,7 +421,9 @@ if 'frames' in st.session_state:
         plotly_frames.append(go.Frame(data=data, name=str(i), layout=dict(title=frame_title)))
     n_frames = len(frames)
     duration_ms = max(10, min(200, int(5000 / n_frames)))
-
+    st.session_state["plotly_frames"] = plotly_frames
+    
+    
     # Use epoch labels on the slider steps (show 'Epoch N' or 'Final')
     steps = []
     for i, fr in enumerate(frames):
@@ -431,10 +442,96 @@ if 'frames' in st.session_state:
 
     fig.frames = plotly_frames
     fig.update_layout(updatemenus=updatemenus, sliders=sliders, title=frames[final_idx]['title'])
-    st.plotly_chart(fig, use_container_width=True)
+    st.session_state['fig'] = fig
+if st.session_state.get("fig") is not None:
+    st.plotly_chart(st.session_state["fig"], use_container_width=True)
+@st.cache_data(show_spinner=False)
+def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40):
+    import io, imageio, plotly.graph_objects as go, plotly.io as pio
 
+    def wrap_text(text, max_len):
+        """Insert <br> in text to wrap long titles."""
+        words = text.split()
+        lines = []
+        current_line = ""
+        for word in words:
+            if len(current_line + " " + word) <= max_len:
+                current_line = f"{current_line} {word}".strip()
+            else:
+                lines.append(current_line)
+                current_line = word
+        lines.append(current_line)
+        return "<br>".join(lines)
+
+    images = []
+
+    for fr in plotly_frames:
+        fig = go.Figure()
+
+        # Add each trace individually, preserving name and line style
+        for trace in fr.data:
+            fig.add_trace(go.Scatter(
+                x=trace.x,
+                y=trace.y,
+                mode=trace.mode,
+                name=trace.name or "",
+                line=trace.line if hasattr(trace, 'line') else None
+            ))
+
+        # Set the frame's title with font size and wrapping
+        if fr.layout.title and hasattr(fr.layout.title, 'text'):
+            wrapped_title = wrap_text(fr.layout.title.text, max_line_length)
+            fig.update_layout(title=dict(
+                text=wrapped_title,
+                x=0.5,  # center title
+                xanchor='center',
+                font=dict(size=16)
+            ))
+
+        # Fix x-axis range if not a system
+        if not is_system:
+            fig.update_layout(xaxis=dict(range=[x.min(), x.max()]))
+
+        # Ensure enough space for title
+        fig.update_layout(
+            width=800,
+            height=600,
+            margin=dict(l=50, r=50, t=120, b=50),  # t=120 gives more space for wrapped title
+        )
+
+        # Convert figure to PNG bytes
+        img_bytes = pio.to_image(fig, format="png", engine="kaleido")
+        images.append(imageio.imread(io.BytesIO(img_bytes)))
+
+    # Save images to GIF
+    gif_bytes = io.BytesIO()
+    imageio.mimsave(gif_bytes, images, format="GIF", fps=fps)
+    gif_bytes.seek(0)
+    return gif_bytes
+
+
+
+# only generate GIF if user requested it
+if make_gif and 'plotly_frames' in st.session_state:
+    with st.spinner("Generating animation GIF..."):
+        gif_bytes = frames_to_gif(
+            st.session_state['plotly_frames'],
+            st.session_state['x_np'],
+            fps=10,
+            is_system=meta.get("is_system", False)
+        )
+        st.session_state['gif_bytes'] = gif_bytes
+
+    st.download_button(
+        label="Download GIF",
+        data=st.session_state['gif_bytes'],
+        file_name="pinn_animation.gif",
+        mime="image/gif"
+    )
     # Show ODE residuals (mean squared residual) over frames if available using Plotly
     # user-controlled toggle to show/hide residuals
+if "frame" in st.session_state:
+    frames = st.session_state["frames"]
     ode_losses = [fr.get('ode_loss') for fr in frames]
     with st.expander("Show ODE residuals", expanded = False):
         # convert None -> nan for plotting
