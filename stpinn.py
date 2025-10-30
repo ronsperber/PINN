@@ -514,7 +514,7 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
         )
 
         # Convert figure to PNG bytes
-        img_bytes = pio.to_image(fig, format="png")
+        img_bytes = pio.to_image(fig, format="png", engine="kaleido")
         images.append(imageio.imread(io.BytesIO(img_bytes)))
 
     # Save images to GIF
