@@ -540,7 +540,7 @@ if make_gif and 'plotly_frames' in st.session_state:
     )
     # Show ODE residuals (mean squared residual) over frames if available using Plotly
     # user-controlled toggle to show/hide residuals
-if "frame" in st.session_state:
+if "frames" in st.session_state:
     frames = st.session_state["frames"]
     ode_losses = [fr.get('ode_loss') for fr in frames]
     with st.expander("Show ODE residuals", expanded = False):
