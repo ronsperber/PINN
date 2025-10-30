@@ -115,6 +115,9 @@ solution = pinn.ode_solve(
 # evaluation
 y_values = solution(x)
 ```
+If we look at the first 125 epochs we can see that it converges quite well to the true solution ($y=e^x$)
+
+![Animation of network converging](./pinn_animation.gif)
 #### Internal functions
 `get_y_trial` : generates the trial function, given $x_0$, the initial conditions, and `NN`
 
