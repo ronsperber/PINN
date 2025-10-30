@@ -23,8 +23,7 @@ with st.expander("Expand to see the mathematics behind this method.", expanded=F
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
 
 
-on_streamlit_cloud = os.environ.get("STREAMLIT_SERVER_RUN_MODE") == "production"
-
+on_streamlit_cloud = "ST_STREAMLIT_CLOUD" in os.environ
 if on_streamlit_cloud:
     make_gif = st.sidebar.checkbox(
         "Generate animation GIF (disabled on Streamlit Cloud)",
