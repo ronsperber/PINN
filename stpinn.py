@@ -277,11 +277,13 @@ if solve_clicked:
             progress_text.text(f"Epoch {epoch}/{epochs} — train_loss: {train_loss:.6e}, val_loss: {val_loss:.6e} — ETA: {eta_str}")
 
         with st.spinner("Solving..."):
+            checkpoint_every = min(max(1, epochs//25),20)
             y_trial, checkpoints = pinn.ode_solve(F=F,
                                                   a=x0,
                                                   ics=ics,
                                                   NN=NN,
                                                   return_checkpoints=True,
+                                                  checkpoint_every=checkpoint_every,
                                                   X=x_train,
                                                   epochs=epochs,
                                                   val_size=0.1, 
@@ -453,7 +455,9 @@ if st.session_state.get("fig") is not None:
     st.plotly_chart(st.session_state["fig"], use_container_width=True)
 @st.cache_data(show_spinner=False)
 def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40):
-    import io, imageio, plotly.graph_objects as go, plotly.io as pio
+    import io
+    import imageio.v2 as imageio
+    import plotly.graph_objects as go, plotly.io as pio
 
     def wrap_text(text, max_len):
         """Insert <br> in text to wrap long titles."""
@@ -506,7 +510,7 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
         )
 
         # Convert figure to PNG bytes
-        img_bytes = pio.to_image(fig, format="png", engine="kaleido")
+        img_bytes = pio.to_image(fig, format="png")
         images.append(imageio.imread(io.BytesIO(img_bytes)))
 
     # Save images to GIF
