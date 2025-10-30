@@ -28,7 +28,8 @@ if on_streamlit_cloud:
     make_gif = st.sidebar.checkbox(
         "Generate animation GIF (disabled on Streamlit Cloud)",
         value=False,
-        disabled=True
+        disabled=True,
+        help="Creating a GIF requires Kaleido to use Chrome, which isn't supported on Streamlit Cloud."
     )
 else:
     make_gif = st.sidebar.checkbox(
