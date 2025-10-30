@@ -453,7 +453,7 @@ if 'frames' in st.session_state:
     st.session_state['fig'] = fig
 if st.session_state.get("fig") is not None:
     st.plotly_chart(st.session_state["fig"], use_container_width=True)
-@st.cache_data(show_spinner=False)
+# @st.cache_data(show_spinner=False)
 def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40):
     import io
     import imageio.v2 as imageio
