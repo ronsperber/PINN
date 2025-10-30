@@ -337,7 +337,6 @@ def train(
         perm = torch.randperm(data_size)
         X_val = [x[perm[:val_size]].requires_grad_(True) for x in X]
         X_train = [x[perm[val_size:]].requires_grad_(True) for x in X]
-        print(len(X_val), len(X_train))
     else:
         X_train =[x.requires_grad_(True) for x in X]
         X_val = None
@@ -554,7 +553,6 @@ def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=No
                 weight = maybe_weight[0] if maybe_weight else 1.0
                 u_pred = NN(X_ic)
                 u_true = u_ic(X_ic) if callable(u_ic) else u_ic
-                # print(u_pred.shape, u_true.shape)
                 total_loss += weight * torch.mean((u_pred - u_true)**2)
             idx += 1
 
