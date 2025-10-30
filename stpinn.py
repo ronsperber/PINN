@@ -530,7 +530,7 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
 
     # Save images to GIF
     gif_bytes = io.BytesIO()
-    imageio.mimsave(gif_bytes, images, format="GIF", fps=fps)
+    imageio.mimsave(gif_bytes, images, format="GIF", fps=fps, loop=0)
     gif_bytes.seek(0)
     return gif_bytes
 
