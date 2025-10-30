@@ -20,7 +20,11 @@ with st.expander("Expand to see the mathematics behind this method.", expanded=F
     st.markdown(math_md)
 # Sidebar inputs driven by ODES metadata
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
-make_gif = st.sidebar.checkbox("Create a GIF from the frames produced", value=False)
+make_gif = st.sidebar.checkbox(
+    "Create a GIF from the frames produced (may be slow)",
+    value=False,
+    help="Generating a GIF requires rendering each frame, which can take some time"
+)
 meta = ODES[ode_choice]
 if meta.get("is_system", False):
     # System inputs
@@ -158,8 +162,10 @@ elif st.session_state['last_params'] != current_params:
     # user changed parameters — clear any previously computed frames so chart doesn't persist
     st.session_state.pop('frames', None)
     st.session_state.pop('x_np', None)
+    st.session_state.pop('plotly_frames', None)
     st.session_state.pop('png_bytes', None)
     st.session_state.pop('gif_bytes', None)
+    st.session_state.pop('fig', None)
     st.session_state['last_params'] = current_params 
 
 col1, col2 = st.columns([1,1])
