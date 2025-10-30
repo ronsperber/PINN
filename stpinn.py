@@ -6,6 +6,7 @@ import numpy as np
 import plotly.graph_objects as go
 import time
 from pathlib import Path
+import os
 from pinn_utils import pinn
 from pinn_utils.ode_meta import ODES
 def read_markdown_file(file_path):
@@ -20,11 +21,22 @@ with st.expander("Expand to see the mathematics behind this method.", expanded=F
     st.markdown(math_md)
 # Sidebar inputs driven by ODES metadata
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
-make_gif = st.sidebar.checkbox(
+
+
+on_streamlit_cloud = os.environ.get("STREAMLIT_SERVER_RUN_MODE") == "production"
+
+if on_streamlit_cloud:
+    make_gif = st.sidebar.checkbox(
+        "Generate animation GIF (disabled on Streamlit Cloud)",
+        value=False,
+        disabled=True
+    )
+else:
+    make_gif = st.sidebar.checkbox(
     "Create a GIF from the frames produced (may be slow)",
     value=False,
     help="Generating a GIF requires rendering each frame, which can take some time"
-)
+    )
 meta = ODES[ode_choice]
 if meta.get("is_system", False):
     # System inputs
@@ -512,7 +524,7 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
         )
 
         # Convert figure to PNG bytes
-        img_bytes = pio.to_image(fig, format="png", engine="kaleido")
+        img_bytes = pio.to_image(fig, format="png")
         images.append(imageio.imread(io.BytesIO(img_bytes)))
 
     # Save images to GIF
@@ -525,8 +537,6 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
 
 # only generate GIF if user requested it
 if make_gif and 'plotly_frames' in st.session_state:
-    import kaleido
-    kaleido.get_chrome()  # ensures Chrome is available in the cloud
     with st.spinner("Generating animation GIF..."):
         gif_bytes = frames_to_gif(
             st.session_state['plotly_frames'],
