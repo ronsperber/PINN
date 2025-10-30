@@ -458,9 +458,7 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
     import io
     import imageio.v2 as imageio
     import plotly.graph_objects as go, plotly.io as pio
-    import kaleido
 
-    kaleido.get_chrome()  # ensures Chrome is available in the cloud
 
 
     def wrap_text(text, max_len):
@@ -527,6 +525,8 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
 
 # only generate GIF if user requested it
 if make_gif and 'plotly_frames' in st.session_state:
+    import kaleido
+    kaleido.get_chrome()  # ensures Chrome is available in the cloud
     with st.spinner("Generating animation GIF..."):
         gif_bytes = frames_to_gif(
             st.session_state['plotly_frames'],
