@@ -458,6 +458,10 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
     import io
     import imageio.v2 as imageio
     import plotly.graph_objects as go, plotly.io as pio
+    import kaleido
+
+    kaleido.get_chrome()  # ensures Chrome is available in the cloud
+
 
     def wrap_text(text, max_len):
         """Insert <br> in text to wrap long titles."""
