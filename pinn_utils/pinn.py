@@ -436,7 +436,7 @@ def train(
                     break
         # put back into training
         NN.train()
-        if epoch % print_every == 0:
+        if (epoch % print_every == 0) or (epoch == epochs):
             print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
         # When we are returning checkpoints, create the checkpoint function and add to list
         if return_checkpoints and epoch % checkpoint_every == 0:
@@ -446,8 +446,6 @@ def train(
             nn_copy.load_state_dict(checkpoint_state)
             nn_copy.eval()
             checkpoints.append((epoch, nn_copy))
-
-    print(f"Final Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
     # put into eval mode after training
     NN.eval()
     return checkpoints
