@@ -391,11 +391,10 @@ def train(
             # set epoch loss to zero
             epoch_loss = 0.0
             # get a number of batches based on largest training set and batch size
-            num_batches = max([ x.size[0] for x in X_train])
+            num_batches = max([ x.shape[0] for x in X_train])
             for _ in range(num_batches):
                 # get a random sample of batch_size from each X in X_train
-                idx = torch.randint(0, train_size, (batch_size,))
-                X_batch = [x[idx] for x in X_train]
+                X_batch = [x[torch.randint(0, x.shape[0], (batch_size,))] for x in X_train]
                 optimizer.zero_grad()
                 loss = loss_fn(*X_batch)
                 loss.backward()
