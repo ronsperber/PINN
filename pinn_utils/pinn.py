@@ -254,6 +254,7 @@ def train(
           epochs: int = 5000,
           lr: float = 1e-3,
           batch_size: int | None= None,
+          batch_mode: str = "shuffle",
           print_every: int = 500,
           use_val: bool = True,
           val_size: float | int = 0.2,
@@ -280,6 +281,9 @@ def train(
     batch_size : int | None
         when not None, the size of batches to use during training
         otherwise training is done on the whole data set at once each epoch
+    batch_mode : str
+        When the mode is "shuffle" the datasets are shuffled and broken into batch_size size subsets
+        When the mode is "random" each epoch we randomly sample a bunch of batch_size each 'batch'
     print_every: int
         How often to print out the current loss and validation loss
     use_val : bool
@@ -367,7 +371,7 @@ def train(
             loss.backward()
             epoch_loss = loss.item()
             optimizer.step()
-        else:
+        elif batch_mode == "shuffle":
             # shuffle every epoch to get new batches
             perm = torch.randperm(train_size)
             epoch_loss = 0.0
