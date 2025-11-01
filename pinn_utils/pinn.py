@@ -3,6 +3,7 @@ module to create PINN for solving an ODE
 and function to use that PINN to solution
 """
 import torch
+from tqdm import tqdm
 import numpy as np, pandas as pd
 import torch.nn as nn
 from itertools import combinations_with_replacement
@@ -254,7 +255,7 @@ def train(
           epochs: int = 5000,
           lr: float = 1e-3,
           batch_size: int | None= None,
-          print_every: int = 500,
+          batch_mode: str = "shuffle",
           use_val: bool = True,
           val_size: float | int = 0.2,
           early_stopping: int | None = None,
@@ -280,8 +281,9 @@ def train(
     batch_size : int | None
         when not None, the size of batches to use during training
         otherwise training is done on the whole data set at once each epoch
-    print_every: int
-        How often to print out the current loss and validation loss
+    batch_mode : str
+        When the mode is "shuffle" the datasets are shuffled and broken into batch_size size subsets
+        When the mode is "random" each epoch we randomly sample a bunch of batch_size each 'batch'
     use_val : bool
         whether or not to split into train/validation sets
     val_size: int | float
@@ -356,78 +358,93 @@ def train(
     # initialize optimizer
     optimizer = torch.optim.Adam(params=NN.parameters(), lr=lr)
     # training loop
-    for epoch in range(1, epochs + 1):
-        # make sure NN is in training state
-        NN.train()
-        if batch_size is None:
-            # when no batching exists reset optimizer
-            # compute loss and do backpropogation
-            optimizer.zero_grad()
-            loss = loss_fn(*X_train)
-            loss.backward()
-            epoch_loss = loss.item()
-            optimizer.step()
-        else:
-            # shuffle every epoch to get new batches
-            perm = torch.randperm(train_size)
-            epoch_loss = 0.0
-            # loop over the batches and compute average loss
-            # each batch run backpropogation
-            for i in range(0, train_size, batch_size):
+    with tqdm(total=epochs, desc="Training", unit="epoch") as pbar:
+        for epoch in range(1, epochs + 1):
+            # make sure NN is in training state
+            NN.train()
+            if batch_size is None:
+                # when no batching exists reset optimizer
+                # compute loss and do backpropogation
                 optimizer.zero_grad()
-                end = min(i+batch_size, train_size)
-                idx = perm[i:end]
-                X_batch = [x_train[idx] for x_train in X_train]
-                loss = loss_fn(*X_batch)
+                loss = loss_fn(*X_train)
                 loss.backward()
-                epoch_loss += loss.item() * len(idx)
+                epoch_loss = loss.item()
                 optimizer.step()
-            epoch_loss /= train_size
-        # compute loss on validation set
-        # set NN to eval for this
-        NN.eval()
-        if use_val:
-            val_loss = loss_fn(*X_val).item()
-        else:
-            val_loss = float('nan')
-        # Call progress callback if provided (epoch, train_loss, val_loss)
-        if progress_callback is not None:
-            try:
-                # Only invoke callback every `progress_every` epochs to reduce UI churn,
-                # but always call on the final epoch so the UI can show completion.
-                if progress_every <= 1 or (epoch % progress_every == 0) or (epoch == epochs):
-                    progress_callback(epoch, float(epoch_loss), float(val_loss))
-            except Exception:
-                # Ensure progress callback failures don't stop training
-                pass
-        # check for early stopping conditions when they exist
-        if use_val:
-            if early_stopping is not None:
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    epochs_since_best = 0
-                    best_weights = {k: v.clone().detach() for k, v in NN.state_dict().items()}
-                else:
-                    epochs_since_best += 1
-                if epochs_since_best >= patience and epoch >= min_epochs:
-                    print(f"Early stopping at epoch {epoch}, validation loss did not improve for {early_stopping['patience']} epochs")
-                    NN.load_state_dict(best_weights)
-                    break
-        # put back into training
-        NN.train()
-        if epoch % print_every == 0:
-            print(f"Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
-        # When we are returning checkpoints, create the checkpoint function and add to list
-        if return_checkpoints and epoch % checkpoint_every == 0:
-            checkpoint_state = {k: v.clone() for k, v in NN.state_dict().items()}
-            # create a function that uses a fresh NN with these weights
-            nn_copy = copy.deepcopy(NN)       # or create a new PINN instance
-            nn_copy.load_state_dict(checkpoint_state)
-            nn_copy.eval()
-            checkpoints.append((epoch, nn_copy))
-
-    print(f"Final Epoch {epoch}, Loss: {epoch_loss:.6f}, Validation Loss: {val_loss:.6f}")
-    # put into eval mode after training
+            elif batch_mode == "shuffle":
+                # shuffle every epoch to get new batches
+                perm = torch.randperm(train_size)
+                epoch_loss = 0.0
+                # loop over the batches and compute average loss
+                # each batch run backpropogation
+                for i in range(0, train_size, batch_size):
+                    optimizer.zero_grad()
+                    end = min(i+batch_size, train_size)
+                    idx = perm[i:end]
+                    X_batch = [x_train[idx] for x_train in X_train]
+                    loss = loss_fn(*X_batch)
+                    loss.backward()
+                    epoch_loss += loss.item() * len(idx)
+                    optimizer.step()
+                epoch_loss /= train_size
+            elif batch_mode == "random":
+                # set epoch loss to zero
+                epoch_loss = 0.0
+                # get a number of batches based on largest training set and batch size
+                num_batches = max([ x.shape[0] for x in X_train])
+                for _ in range(num_batches):
+                    # get a random sample of batch_size from each X in X_train
+                    X_batch = [x[torch.randint(0, x.shape[0], (batch_size,))] for x in X_train]
+                    optimizer.zero_grad()
+                    loss = loss_fn(*X_batch)
+                    loss.backward()
+                    optimizer.step()
+                    epoch_loss += loss.item()
+                epoch_loss /= num_batches
+            else:
+                raise ValueError(f"{batch_mode} is not a valid mode. Mode must be 'random' or 'shuffle'")
+            # compute loss on validation set
+            # set NN to eval for this
+            NN.eval()
+            if use_val:
+                val_loss = loss_fn(*X_val).item()
+            else:
+                val_loss = float('nan')
+            # Call progress callback if provided (epoch, train_loss, val_loss)
+            if progress_callback is not None:
+                try:
+                    # Only invoke callback every `progress_every` epochs to reduce UI churn,
+                    # but always call on the final epoch so the UI can show completion.
+                    if progress_every <= 1 or (epoch % progress_every == 0) or (epoch == epochs):
+                        progress_callback(epoch, float(epoch_loss), float(val_loss))
+                except Exception:
+                    # Ensure progress callback failures don't stop training
+                    pass
+            # check for early stopping conditions when they exist
+            if use_val:
+                if early_stopping is not None:
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        epochs_since_best = 0
+                        best_weights = {k: v.clone().detach() for k, v in NN.state_dict().items()}
+                    else:
+                        epochs_since_best += 1
+                    if epochs_since_best >= patience and epoch >= min_epochs:
+                        print(f"Early stopping at epoch {epoch}, validation loss did not improve for {early_stopping['patience']} epochs")
+                        NN.load_state_dict(best_weights)
+                        break
+            # put back into training
+            NN.train()
+            pbar.set_postfix(loss=epoch_loss, val_loss=val_loss)
+            pbar.update(1)
+            # When we are returning checkpoints, create the checkpoint function and add to list
+            if return_checkpoints and epoch % checkpoint_every == 0:
+                checkpoint_state = {k: v.clone() for k, v in NN.state_dict().items()}
+                # create a function that uses a fresh NN with these weights
+                nn_copy = copy.deepcopy(NN)       # or create a new PINN instance
+                nn_copy.load_state_dict(checkpoint_state)
+                nn_copy.eval()
+                checkpoints.append((epoch, nn_copy))
+        # put into eval mode after training
     NN.eval()
     return checkpoints
 
@@ -617,12 +634,15 @@ def pde_solve(
         X.append(ic[0]) # add the IC training sets
     for bc in BC_list:
         X.append(bc[0]) # add the BC training sets
+    # set batch mode to random unless set specifically to shuffle by the user
+    batch_mode = train_params.get("batch_mode", "random")
     # train the neural network
     train(
         NN=NN,
         loss_fn=loss_fn,
         X=X,
         use_val=False,
+        batch_mode=batch_mode,
         **train_params
     )
     return NN

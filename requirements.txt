@@ -66,3 +66,5 @@ tzdata==2025.2
 urllib3==2.5.0
 watchdog==6.0.0
 wheel==0.45.1
+tqdm==4.67.1
+ipykernel==6.30.1
