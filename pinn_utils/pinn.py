@@ -402,6 +402,8 @@ def train(
                 optimizer.step()
                 epoch_loss += loss.item()
             epoch_loss /= num_batches
+        else:
+            raise ValueError(f"{batch_mode} is not a valid mode. Mode must be 'random' or 'shuffle'")
         # compute loss on validation set
         # set NN to eval for this
         NN.eval()
@@ -636,12 +638,15 @@ def pde_solve(
         X.append(ic[0]) # add the IC training sets
     for bc in BC_list:
         X.append(bc[0]) # add the BC training sets
+    # set batch mode to random unless set specifically to shuffle by the user
+    batch_mode = train_params.get("batch_mode", "random")
     # train the neural network
     train(
         NN=NN,
         loss_fn=loss_fn,
         X=X,
         use_val=False,
+        batch_mode=batch_mode,
         **train_params
     )
     return NN
