@@ -532,12 +532,13 @@ def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=No
     de_eq : Callable[[nn.Module, torch.Tensor], torch.Tensor]
         PDE residual function (e.g. lambda NN, x: u_t - alpha * u_xx).
     ic_conditions : list of tuples | None
-        Each tuple is (X_ic, u_ic, weight) where:
+        Each tuple is (X_ic, ic_residual_fn, weight) where:
             X_ic : tensor of IC points
-            u_ic : callable or tensor for target IC values
+            ic_residual_fn : callable (NN, X) -> residual tensor (should be ≈ 0)
             weight : optional float (defaults to 1.0)
     bc_conditions : list of tuples | None
-        Each tuple is (X_bc, u_bc, weight) with same semantics.
+        Same structure for boundary conditions.
+            Each tuple is (X_bc, bc_residual_fn, weight) with same semantics.
     DE_params : dict | None
         Optional PDE parameters (passed to `de_eq` if needed).
 
@@ -566,20 +567,18 @@ def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=No
 
         # Initial conditions
         if ic_conditions is not None:
-            for (X_ic, u_ic, *maybe_weight) in ic_conditions:
+            for (X_ic, ic_residual_fn, *maybe_weight) in ic_conditions:
                 weight = maybe_weight[0] if maybe_weight else 1.0
-                u_pred = NN(X_ic)
-                u_true = u_ic(X_ic) if callable(u_ic) else u_ic
-                total_loss += weight * torch.mean((u_pred - u_true)**2)
+                u_ic_eval = ic_residual_fn(NN, X_ic)
+                total_loss += weight * torch.mean(u_ic_eval**2)
             idx += 1
 
         # Boundary conditions
         if bc_conditions is not None:
-            for (X_bc, u_bc, *maybe_weight) in bc_conditions:
+            for (X_bc, bc_residual_fn, *maybe_weight) in bc_conditions:
                 weight = maybe_weight[0] if maybe_weight else 1.0
-                u_pred = NN(X_bc)
-                u_true = u_bc(X_bc) if callable(u_bc) else u_bc
-                total_loss += weight * torch.mean((u_pred - u_true)**2)
+                u_bc_eval = bc_residual_fn(NN, X_bc)
+                total_loss += weight * torch.mean(u_bc_eval**2)
             idx += 1
 
         return total_loss
@@ -609,12 +608,12 @@ def pde_solve(
     X_DE : torch.Tensor
         region on which the differential equation should hold
     IC_list : List[tuple] | None, optional
-        Each tuple is (X_ic, u_ic, weight) where:
+        Each tuple is (X_ic, ic_residual_fn, weight) where:
             X_ic : tensor of IC points
-            u_ic : callable or tensor for target IC values
+            ic_residual_fn : Callable (NN, X) -> residual tensor (should be ≈ 0)
             weight : optional float (defaults to 1.0)
     BC_list : List[tuple] | None, optional
-        Each tuple is (X_bc, u_bc, weight) with the same semantics as IC_list
+        Each tuple is (X_bc, bc_residual_fn, weight) with the same semantics as IC_list
     DE_params : dict | None, optional
         any additional arguments expected by the DE function (e.g. {"alpha": 0.1})
     train_params : dict
