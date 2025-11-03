@@ -1,3 +1,16 @@
+## Table of Contents
+
+- [Physics-Informed Neural Networks for ODEs and Systems](#physics-informed-neural-networks-for-odes-and-systems)
+- [Approach for ODEs](#approach-for-odes)
+  - [Why not just let $y = NN(x)$ and include the initial conditions as part of the loss function?](#why-not-just-let-y--nnx--and-include-the-initial-conditions-as-part-of-the-loss-function)
+- [Approach for PDEs](#approach-for-pdes)
+- [Contents of the repository](#contents-of-the-repository)
+- [Example usage](#example-usage)
+- [Internal functions](#internal-functions)
+- [Running the Streamlit App](#running-the-streamlit-app)
+  - [Features in the app](#features-in-the-app)
+  - [Notes on systems of ODEs](#notes-on-systems-of-odes)
+
 # Physics-Informed Neural Networks for ODEs and Systems
 
 This repository contains a module for using a physics-informed neural network (PINN) to solve ordinary differential equations (ODEs) and systems of ODEs.  
