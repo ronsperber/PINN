@@ -161,22 +161,27 @@ def derivatives(y: torch.Tensor, x: torch.Tensor, order: int) -> List[torch.Tens
     return derivs  # [y, y', y'', ..., y^(order)]
 
 
-def compute_unique_derivatives(NN, x, order=2):
+def compute_unique_derivatives(f, x, order=2):
     """
-    Compute all unique derivatives of each NN output up to a given order.
+    Compute all unique derivatives of f output up to a given order.
     Mixed partials are treated as equal (∂²/∂x∂y = ∂²/∂y∂x).
 
-    Args:
-        NN: neural network mapping x -> y (can have multiple outputs)
-        x: torch.Tensor of shape (batch_size, num_inputs), requires_grad=True
-        order: max derivative order (integer)
+    Parameters
+    ----------
+    f: Callabale | nn.Module
+        function for which the derivative will be computed
+    x: torch.Tensor of shape (batch_size, num_inputs), requires_grad=True
+        tensor at which the derivatives of f are to be evaluated
+    order: int
+        maximum order of derivatives to compute
 
-    Returns:
-        derivs_per_output: list of dicts, one per output
-            Each dict maps derivative name -> tensor (batch_size,)
+    Returns
+    -------
+    derivs_per_output: list of dicts, one per output
+        Each dict maps derivative name -> tensor (batch_size,)
     """
-    batch_size, num_inputs = x.shape
-    y = NN(x)
+    _ , num_inputs = x.shape
+    y = f(x)
     if y.ndim == 1:
         y = y.unsqueeze(-1)
     num_outputs = y.shape[1]
@@ -233,6 +238,17 @@ def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
     return loss
 
 def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
+    """
+    function to turn the arguments to train() to be a list of
+    torch.Tensors
+    Parameters
+    ----------
+    X : TensorListLike
+        inputs to be processed
+    Returns
+    -------
+    List of tensors
+    """
     # if a single type was passed, convert to a list 
     if not isinstance(X, (list, tuple)):
         X = [X]
