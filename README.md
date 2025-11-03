@@ -64,17 +64,19 @@ which is the mean square residual comparing $F$ to $0$.
 This approach automatically enforces the initial conditions exactly, leaving the network free to learn only the behavior constrained by the differential equation itself.
 
 ### Approach for PDEs
-The technique used for ODEs doesn't translate very well to PDEs as while an ODE has initial conditions just the value of the function at a point $y(x_0),y'(x_0),\ldots$, conditions for a PDE vary more and often include things like $u(0,t) = f(t)$ which does not work with the approach for ODEs. So for the PDEs the approach is as follows:
-- Start with a DE of the form $F(u,u_x,u_y,u_{xx},u_{xy},y_{yy},\ldots) = 0$ and a set $X_{DE}$ where that equation is intended to hold, along with an optional weight $w_{DE}
-- For each initial condition a pair $(X_{IC},residual_{IC})$ where the condition is that $residual_{IC} = 0$ on $X_{IC}$. There can be an additional weight $w_{IC}$ for how this is to be weighted for the loss function
-- For each boundary condition, we have a similar pair $(X_{BC}, residual_{BC})$ and an optional weight $w_{BC}$ that are treated the same
-- The loss function $L = w_{DE}\overline{F(X_{DE})^2} + \sum\nolimits_{X_{IC} \in IC-sets} w_{IC} \overline{residual_{IC}(X_{IC} )^2}+ \sum\nolimits_{X_{BC} \in BC-sets} w_{BC} \overline{residual_{BC}(X_{BC})^2}$
+The technique used for ODEs doesn't translate very well to PDEs.  
+While an ODE typically has initial conditions specified only at a point (e.g. $y(x_0), y'(x_0), \ldots$),  
+a PDE involves conditions defined over regions or boundaries — for example, $u(0,t) = f(t)$ — which cannot be incorporated into the same functional trial form used for ODEs. So, for the PDEs, the approach is as follows :
+- Start with a DE of the form $F(u,u_x,u_y,u_{xx},u_{xy},u_{yy},\ldots) = 0$ and a set $X_{DE}$ where that equation is intended to hold, along with an optional weight $w_{DE}$.
+- For each initial condition, define a pair $(X_{IC}, residual_{IC})$, where the condition enforces $residual_{IC} = 0$ on $X_{IC}$ with an optional weight $w_{IC}$.
+- For each boundary condition, define a similar pair $(X_{BC}, residual_{BC})$, with an optional weight $w_{BC}$.
+- The loss function $L = w_{DE}\overline{F(X_{DE})^2} + \sum\nolimits_{X_{IC} \in IC-sets} w_{IC} \overline{residual_{IC}(X_{IC})^2}+ \sum\nolimits_{X_{BC} \in BC-sets} w_{BC} \overline{residual_{BC}(X_{BC})^2}$
 
-Here, the idea is we take the sum of mean square residuals of the differential equation and any initial or boundary conditions on the appropriate set. This gets passed as the loss function to a PINN to train with.
+Here, the idea is to take the sum of mean-square residuals from the differential equation, initial conditions, and boundary conditions over their respective sets. This gets passed as the loss function to a PINN to train with.
 
 ### Contents of the repository
 
-- `pinn_utils/pinn.py`: Contains the `PINN` class and functions necesary to train a PINN class for a solution to a differntial equation.
+- `pinn_utils/pinn.py`: Contains the `PINN` class and functions necessary to train a PINN for a solution to a differential equation.
   - `PINN` creates a feed-forward neural network with input, hidden, and output layers. Activation functions can be specified per layer.
   - `ode_solve` trains the network to minimize the residual of a given DE, using initial conditions and the supplied `F` function.
   - `pde_solve` trains the network to minimize the residuals involved for a PDE with initial conditions and boundary conditions
@@ -86,12 +88,14 @@ Here, the idea is we take the sum of mean square residuals of the differential e
 
 - `stpinn.py`: Streamlit app demonstrating the solver and showing analytic solutions for comparison.
 - `test_all_desols.py`: Unit test using numeric differentiation approximation to verify that the analytic solutions are correct
-- `wave_eq.ipynb`: A sample notebook with an example of solving a wave equation
+- [`wave_eq.ipynb`](./wave_eq.ipynb): A sample notebook with an example of solving a wave equation.
+
 
 Example usage to solve $y' = y$, $y(0)=1$ on $[-1,1]$
 ```python
 # necessary imports
 import torch
+import torch.nn as nn
 from pinn_utils import pinn
 
 # create the neural network
@@ -131,13 +135,15 @@ If we look at the first 125 epochs we can see that it converges quite well to th
 ![Animation of network converging](./pinn_animation.gif)
 
 We can also look at a PDE example. Here we'll consider a simple version of the wave equation :
-$$u_{xx} = u_{yy}$$
+$$u_{tt} = c^2 u_{xx}$$
 Initial conditions:
 $$ u(x,0) = \sin(\pi x), u_t(x,0) = 0$$
 Boundary conditions
 $$ u(0,t) = u(1,t) = 0 $$
+In our example we will use $c=1$
 ```python
 # necessary imports
+import math
 import torch
 from pinn_utils import pinn
 
@@ -150,17 +156,17 @@ NN = pinn.PINN(
     )
 
 # set up residual functions
-# first the main equation u_xx = c^2 u_yy. In our example c is 1
+# first the main equation u_tt = c^2 u_xx. In our example c is 1
 def wave_eq(u, X, c=1.0):
     # compute the first and second order derivatives of NN 
     # here x0 is the first independent variable, x, and x1 is the 2nd independent variable, t.
     derivs = pinn.compute_unique_derivatives(lambda x: u(x), X, order=2)[0]
     # return NN_tt - c**2 * NN_xx
     return derivs["x1_x1"] - c**2 * derivs["x0_x0"]
-# this is for the initial condition that u(0,t) = sin(pi * t)
+# this is for the initial condition that u(x,0) = sin(pi * x)
 def f_ic(u, X):
     # return shape (N,1)
-    return (X) - torch.sin(math.pi * X[:, 0:1])
+    return u(X) - torch.sin(math.pi * X[:, 0:1])
 
 # for the initial condition that u_t(0,t) = 0
 def g_ic(X):
@@ -176,15 +182,15 @@ def ut_IC( u, X):
     du_dt = derivs["x1"].unsqueeze(1)   # derivative w.r.t. t
     return du_dt - g_ic(X)        # return residual shape (N,1)
 
-# for the boundary conditions u(x,0) = y(x,1) = 0, the residual is just the output of the function
-u_bc0 = lambda u, x : 0
-u_bc1 = lambda u, x : 0
+# for the boundary conditions u(0,t) = u(1,t) = 0, the residual is just the output of the function
+u_bc0 = lambda u, X : u(X)
+u_bc1 = lambda u, X : u(X)
 
 # now setting up the points to train on. we'll simply choose random points in each set
 # for the differential equation the set of points is the square [0,1] x [0,1]
 X_DE = torch.rand(5000, 2)  # (x,t) in [0,1]x[0,1]
 # for the initial conditions we consider [0,1] x 0:
-X_IC = torch.cat([torch.rand(500,1) torch.zeros(500,1)], dim=1)
+X_IC = torch.cat([torch.rand(500,1), torch.zeros(500,1)], dim=1)
 # for the boundary conditions we need 0 x [0,1] and 1 x [0,1]
 X_BC0 = torch.cat([torch.zeros(500,1), torch.rand(500,1)], dim=1)
 X_BC1 = torch.cat([torch.ones(500,1), torch.rand(500,1)], dim=1)
@@ -209,9 +215,13 @@ solution = pinn.pde_solve(
 )
 ```
 #### Internal functions
-`get_y_trial` : generates the trial function, given $x_0$, the initial conditions, and `NN`
+`get_y_trial` : Generates the trial function, given $x_0$, the initial conditions, and `NN`
 
 `get_loss` : Generates the loss function using initial conditions, the neural network, and the differential equation $F$.
+
+`get_pde_loss` : Generates the loss function from the DE, ICs, and BCs for a PDE
+
+(Other utility functions such as `compute_unique_derivatives` and `train` are documented in the main module description above.)
 
 ### Running the Streamlit App
 
@@ -225,21 +235,20 @@ streamlit run stpinn.py
 You can access the app already on [Streamlit Cloud](https://pinnsolver.streamlit.app)
 #### Features in the app:
 
--Select from example differential equations or systems.
+- Select from example differential equations or systems.
 
--Enter initial conditions and parameters.
+- Enter initial conditions and parameters.
 
--View the neural network solution evolving over training epochs via an animated Plotly graph.
+- View the neural network solution evolving over training epochs via an animated Plotly graph.
 
--Compare the PINN solution to the analytic solution (if available).
+- Compare the PINN solution to the analytic solution (if available).
 
--Adjust the time interval for the solution and network hyperparameters like number of hidden layers, layer width, activation functions, learning rate, and number of epochs.
+- Adjust the time interval for the solution and network hyperparameters like number of hidden layers, layer width, activation functions, learning rate, and number of epochs.
 
 #### Notes on systems of ODEs:
 
--For linear systems like $y' = A y$, enter the components of the matrix $A$ and the initial vector $y_0$.
+- For linear systems like $y' = A y$, enter the components of the matrix $A$ and the initial vector $y_0$.
 
--The x/y plot shows the trajectory of the system in phase space.
+- The x/y plot shows the trajectory of the system in phase space.
 
--Analytic solutions (where available) are displayed for comparison.
-
+- Analytic solutions (where available) are displayed for comparison.
