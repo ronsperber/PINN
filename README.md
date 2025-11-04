@@ -89,16 +89,13 @@ Here, the idea is to take the sum of mean-square residuals from the differential
 
 ### Contents of the repository
 
-- `pinn_utils/pinn.py`: Contains the `PINN` class and functions necessary to train a PINN for a solution to a differential equation.
-  - `PINN` creates a feed-forward neural network with input, hidden, and output layers. Activation functions can be specified per layer.
-  - `ode_solve` trains the network to minimize the residual of a given DE, using initial conditions and the supplied `F` function.
-  - `pde_solve` trains the network to minimize the residuals involved for a PDE with initial conditions and boundary conditions
-  -  `compute_unique_derivatives` takes a function, a set X, and an order and computes all partial derivatives of f up to that order on X
-  - `train` is a generic utility that can train any PyTorch network on one or more datasets using a supplied loss function — similar to `model.fit()` in Keras, but with full PyTorch flexibility
+- `pinn_utils/pinn.py`: Contains the `PINN` class 
+- `pinn_utils/training.py` : Contains the `train` function used to train any network, given the network, training data set(s), and loss function
+- `pinn_utils/ode_solve` : contains the `ode_solve` function to solve an ordinary differential equation or system. Given initial conditions and a differential equation residual F, it tries to minimize F on the training set as well some helper functions
+- `pinn_utils/pde_solve` : contains the `pde_solve` function to solve a partial differential equation or system. It must be given a set X_DE and a diffential equation residual for X_DE and optional sets of pairs of the form (X_IC, f_ic) or (X_BC, f_bc) where these are pairs of sets and residuals to minimize on those sets
+  `pinn_utils/derivatives.py` : contains functions to compute both ordinary and partial derivatives for a function on a set X
 - `pinn_utils/de_sols.py`: Analytic solutions for example DEs used in the app.
-
 - `pinn_utils/ode_meta.py`: Dictionary of metadata for each DE. Includes order, parameters, `F` function, analytic solution (if available), and display information.
-
 - `stpinn.py`: Streamlit app demonstrating the solver and showing analytic solutions for comparison.
 - `test_all_desols.py`: Unit test using numeric differentiation approximation to verify that the analytic solutions are correct
 - [`wave_eq.ipynb`](./wave_eq.ipynb): A sample notebook with an example of solving a wave equation.
@@ -110,6 +107,7 @@ Example usage to solve $y' = y$, $y(0)=1$ on $[-1,1]$
 import torch
 import torch.nn as nn
 from pinn_utils import pinn
+from pinn_utils import ode_solve
 
 # create the neural network
 NN = pinn.PINN(
@@ -130,7 +128,7 @@ ics = [1]                    # y_0 = 1
 x = torch.linspace(-1, 1, 200).reshape(-1,1)   # interval [-1,1]
 
 # run the solver
-solution = pinn.ode_solve(
+solution = ode_solve.ode_solve(
     F=F,
     a=a,
     ics=ics,
@@ -159,6 +157,8 @@ In our example we will use $c=1$
 import math
 import torch
 from pinn_utils import pinn
+from pinn_utils import pde_solve
+from pinn_utils import derivatives
 
 # setup the PINN
 NN = pinn.PINN(
@@ -173,7 +173,7 @@ NN = pinn.PINN(
 def wave_eq(u, X, c=1.0):
     # compute the first and second order derivatives of NN 
     # here x0 is the first independent variable, x, and x1 is the 2nd independent variable, t.
-    derivs = pinn.compute_unique_derivatives(lambda x: u(x), X, order=2)[0]
+    derivs = derivatives.compute_unique_derivatives(lambda x: u(x), X, order=2)[0]
     # return NN_tt - c**2 * NN_xx
     return derivs["x1_x1"] - c**2 * derivs["x0_x0"]
 # this is for the initial condition that u(x,0) = sin(pi * x)
@@ -191,7 +191,7 @@ def g_ic(X):
 def ut_IC( u, X):
     # this takes an arbitrary function and set X and returns 
     # du/dt(X) - g_ic(X)
-    derivs = pinn.compute_unique_derivatives(lambda x: u(x), X, order=1)[0]
+    derivs = derivatives.compute_unique_derivatives(lambda x: u(x), X, order=1)[0]
     du_dt = derivs["x1"].unsqueeze(1)   # derivative w.r.t. t
     return du_dt - g_ic(X)        # return residual shape (N,1)
 
@@ -219,7 +219,7 @@ BC_list = [
 
 # to solve we use pde_solve
 # invoke the solver with the DE, X_DE, network, and ICs/BCs
-solution = pinn.pde_solve(
+solution = pde_solve.pde_solve(
     DE=wave_eq,
     X_DE=X_DE,
     NN=NN,
@@ -234,7 +234,6 @@ solution = pinn.pde_solve(
 
 `get_pde_loss` : Generates the loss function from the DE, ICs, and BCs for a PDE
 
-(Other utility functions such as `compute_unique_derivatives` and `train` are documented in the main module description above.)
 
 ### Running the Streamlit App
 
