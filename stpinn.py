@@ -1,5 +1,4 @@
 import streamlit as st
-import importlib
 import pandas as pd
 import torch
 import numpy as np
@@ -7,21 +6,20 @@ import plotly.graph_objects as go
 import time
 from pathlib import Path
 import os
-from pinn_utils import pinn
+from pinn_utils import pinn, ode_solve, derivatives
 from pinn_utils.ode_meta import ODES
 def read_markdown_file(file_path):
     """Reads the content of a Markdown file."""
     return Path(file_path).read_text()
 # read the markdown with mathematical background
 math_md = read_markdown_file("PINN_math.md")
-importlib.reload(pinn)
+
 st.title("Solving ODEs using a PINN (Physics Informed Neural Network)")
 st.write("To see a differential equation solved using a PINN, select an equation type on the left, adjust any desired parameters, and press solve.")
 with st.expander("Expand to see the mathematics behind this method.", expanded=False):
     st.markdown(math_md)
 # Sidebar inputs driven by ODES metadata
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
-
 
 on_streamlit_cloud = "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION" in os.environ
 if on_streamlit_cloud:
@@ -291,7 +289,7 @@ if solve_clicked:
 
         with st.spinner("Solving..."):
             checkpoint_every = min(max(1, epochs//25),20)
-            y_trial, checkpoints = pinn.ode_solve(F=F,
+            y_trial, checkpoints = ode_solve.ode_solve(F=F,
                                                   a=x0,
                                                   ics=ics,
                                                   NN=NN,
@@ -343,12 +341,12 @@ if solve_clicked:
                 # final frame: use the trained NN instance
                 nn_for_eval = NN
             # build a differentiable trial function from this NN so we can compute derivatives/residual
-            y_fn = pinn.get_y_trial(x0, ics, nn_for_eval)
+            y_fn = ode_solve.get_y_trial(x0, ics, nn_for_eval)
             # ensure x_train requires grad for derivative computation
             x_for_eval = x_train.detach().clone().requires_grad_(True)
             # compute the ODE loss at each checkpoint
             y_torch = y_fn(x_for_eval)
-            derivs = pinn.derivatives(y_torch, x_for_eval, len(ics))
+            derivs = derivatives.derivatives(y_torch, x_for_eval, len(ics))
             try:
                 res = F(x_for_eval, *derivs)
                 ode_loss = float(torch.mean(res**2).item())
@@ -569,9 +567,6 @@ if "frames" in st.session_state:
         final_vals = [v for v in ode_losses if v is not None]
         if final_vals:
             st.write(f"Final ODE residual (mean): {final_vals[-1]:.6e}")
-
-
-
     # Show MSE for final frame if true solution is available
     final_frame = frames[-1]
     if final_frame.get('y_true') is not None:
