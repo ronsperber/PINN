@@ -83,7 +83,12 @@ a PDE involves conditions defined over regions or boundaries — for example, $u
 - Start with a DE of the form $F(u,u_x,u_y,u_{xx},u_{xy},u_{yy},\ldots) = 0$ and a set $X_{DE}$ where that equation is intended to hold, along with an optional weight $w_{DE}$.
 - For each initial condition, define a pair $(X_{IC}, residual_{IC})$, where the condition enforces $residual_{IC} = 0$ on $X_{IC}$ with an optional weight $w_{IC}$.
 - For each boundary condition, define a similar pair $(X_{BC}, residual_{BC})$, with an optional weight $w_{BC}$.
-- The loss function $L = w_{DE}\overline{F(X_{DE})^2} + \sum\nolimits_{X_{IC} \in IC-sets} w_{IC} \overline{residual_{IC}(X_{IC})^2}+ \sum\nolimits_{X_{BC} \in BC-sets} w_{BC} \overline{residual_{BC}(X_{BC})^2}$
+- The loss function
+
+$$
+L = \frac{1}{|X_{DE}|} \sum_{x \in X_{DE}} \big(F(x)^2\big)   + \sum_{X_{IC}} \frac{1}{|X_{IC}|} \sum_{x \in X_{IC}} \big(\text{residual}_{IC}(x)^2\big)  + \sum_{X_{BC}} \frac{1}{|X_{BC}|} \sum_{x \in X_{BC}} \big(\text{residual}_{BC}(x)^2\big)
+$$
+
 
 Here, the idea is to take the sum of mean-square residuals from the differential equation, initial conditions, and boundary conditions over their respective sets. This gets passed as the loss function to a PINN to train with.
 
@@ -91,9 +96,9 @@ Here, the idea is to take the sum of mean-square residuals from the differential
 
 - `pinn_utils/pinn.py`: Contains the `PINN` class 
 - `pinn_utils/training.py` : Contains the `train` function used to train any network, given the network, training data set(s), and loss function
-- `pinn_utils/ode_solve` : contains the `ode_solve` function to solve an ordinary differential equation or system. Given initial conditions and a differential equation residual F, it tries to minimize F on the training set as well some helper functions
-- `pinn_utils/pde_solve` : contains the `pde_solve` function to solve a partial differential equation or system. It must be given a set X_DE and a diffential equation residual for X_DE and optional sets of pairs of the form (X_IC, f_ic) or (X_BC, f_bc) where these are pairs of sets and residuals to minimize on those sets
-  `pinn_utils/derivatives.py` : contains functions to compute both ordinary and partial derivatives for a function on a set X
+- `pinn_utils/ode_solve.py` : contains the `ode_solve` function to solve an ordinary differential equation or system. Given initial conditions and a differential equation residual F, it tries to minimize F on the training set as well some helper functions
+- `pinn_utils/pde_solve.py` : contains the `pde_solve` function to solve a partial differential equation or system. It must be given a set X_DE and a diffential equation residual for X_DE and optional sets of pairs of the form (X_IC, f_ic) or (X_BC, f_bc) where these are pairs of sets and residuals to minimize on those set
+- `pinn_utils/derivatives.py` : contains functions to compute both ordinary and partial derivatives for a function on a set X
 - `pinn_utils/de_sols.py`: Analytic solutions for example DEs used in the app.
 - `pinn_utils/ode_meta.py`: Dictionary of metadata for each DE. Includes order, parameters, `F` function, analytic solution (if available), and display information.
 - `stpinn.py`: Streamlit app demonstrating the solver and showing analytic solutions for comparison.
@@ -228,11 +233,11 @@ solution = pde_solve.pde_solve(
 )
 ```
 #### Internal functions
-`get_y_trial` : Generates the trial function, given $x_0$, the initial conditions, and `NN`
+`get_y_trial` (`ode_solve.py`) : Generates the trial function, given $x_0$, the initial conditions, and `NN`
 
-`get_loss` : Generates the loss function using initial conditions, the neural network, and the differential equation $F$.
+`get_loss` (`ode_solve.py`) : Generates the loss function using initial conditions, the neural network, and the differential equation $F$.
 
-`get_pde_loss` : Generates the loss function from the DE, ICs, and BCs for a PDE
+`get_pde_loss` (`pde_solve.py`) : Generates the loss function from the DE, ICs, and BCs for a PDE
 
 
 ### Running the Streamlit App
