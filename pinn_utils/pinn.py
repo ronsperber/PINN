@@ -168,7 +168,7 @@ def compute_unique_derivatives(f, x, order=2):
 
     Parameters
     ----------
-    f: Callabale | nn.Module
+    f: Callable | nn.Module
         function for which the derivative will be computed
     x: torch.Tensor of shape (batch_size, num_inputs), requires_grad=True
         tensor at which the derivatives of f are to be evaluated
@@ -222,6 +222,62 @@ def compute_unique_derivatives(f, x, order=2):
         derivs_per_output.append(deriv_dict)
 
     return derivs_per_output
+
+def compute_vector_derivatives(u: Callable, X:torch.tensor, order:int = 2) -> List[dict]:
+    """
+    computes a list of partial derivatives for each component of a vector valued function
+    Parameters
+    ---------
+    u: Callable
+        vector valued function that we want partial derivatives for
+    X : torch.tensor
+        where the derivatives are to be evaluated
+    order : int
+        maximum order of derivates wanted
+    returns
+    all_derivs : List[dict]
+        List of derivative dicts. each element in the list 
+        corresponds to one component
+    """
+    num_outputs = u(X).shape[1]
+    all_derivs = []
+    for i in range(num_outputs):
+        yi = lambda x: u(x)[:, i:i+1]
+        derivs = pinn.compute_unique_derivatives(yi, X, order=order)[0]
+        all_derivs.append(derivs)
+    return all_derivs
+
+def jacobian(u, X):
+    """
+    Computes the Jacobian J for a function u: R^m -> R^n evaluated at X.
+    
+    Parameters
+    ----------
+    u: callable
+        returns shape (batch_size, n)
+    X: tensor 
+        inputs to u of shape (batch_size, m)
+    
+    Returns
+    -------
+    J: tensor of shape (batch_size, n, m)
+        J[i,j,k] = d(u_j)/d(x_k) evaluated at batch element i
+    """
+    derivs_list = compute_vector_derivatives(u, X, order=1)  # list of dicts, length n
+    n = len(derivs_list)
+    m = len(derivs_list[0]) - 1  # number of input variables
+    batch_size = X.shape[0]
+
+    # initialize a tensor to hold the Jacobian
+    J = torch.zeros(batch_size, n, m, device=X.device, dtype=X.dtype)
+
+    # stack partial derivatives into the Jacobian
+    for i, derivs in enumerate(derivs_list):      # over outputs
+         for j, key in enumerate(sorted(k for k in derivs.keys() if k != 'y')):
+            J[:, i, j] = derivs[key].squeeze(-1)  # make sure it's (batch_size,)
+
+    return J
+
 
 def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
     """
