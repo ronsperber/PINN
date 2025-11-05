@@ -13,7 +13,6 @@ def read_markdown_file(file_path):
     return Path(file_path).read_text()
 # read the markdown with mathematical background
 math_md = read_markdown_file("PINN_math.md")
-
 st.title("Solving ODEs using a PINN (Physics Informed Neural Network)")
 st.write("To see a differential equation solved using a PINN, select an equation type on the left, adjust any desired parameters, and press solve.")
 with st.expander("Expand to see the mathematics behind this method.", expanded=False):
@@ -29,7 +28,6 @@ if on_streamlit_cloud:
         value=False,
         disabled=True,
         help="Generating a GIF requires Kaleido with Chrome, which doesn't work on Streamlit Cloud. To create and download a GIF, run the app locally."
-
     )
 else:
     make_gif = st.sidebar.checkbox(
@@ -119,9 +117,7 @@ params = {
     "A21": A21,
     "A22": A22,
 }
-
 activation = activation_dict[activation_option]
-
 # Build a human-readable ODE string for titles
 ode = meta.get('ode_str', lambda **kw: ode_choice)(**params)
 # function to safely store vectors in params for comparison
@@ -137,23 +133,6 @@ def to_serializable(val):
     elif isinstance(val, (list, tuple)):
         return [to_serializable(v) for v in val]
     return val
-def add_frame_traces(fig, y_pred, y_true=None, x=None, is_system=False):
-    """
-    Add prediction and optional true solution to a Plotly figure.
-    y_pred: np.ndarray
-    y_true: np.ndarray or None
-    x: 1D np.ndarray, only used for scalar ODEs
-    is_system: bool, whether this is a system of ODEs
-    """
-    if is_system:
-        fig.add_trace(go.Scatter(x=y_pred[:, 0], y=y_pred[:, 1], mode='lines', name='Prediction'))
-        if y_true is not None:
-            fig.add_trace(go.Scatter(x=y_true[:, 0], y=y_true[:, 1], mode='lines', name='True Solution', line=dict(dash='dash')))
-    else:
-        fig.add_trace(go.Scatter(x=x, y=y_pred.flatten(), mode='lines', name='Prediction'))
-        if y_true is not None:
-            fig.add_trace(go.Scatter(x=x, y=y_true.flatten(), mode='lines', name='True Solution', line=dict(dash='dash')))
-
 
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 # current_params holds all sidebar parameters
@@ -431,12 +410,15 @@ if st.session_state.get("fig") is not None:
     st.plotly_chart(st.session_state["fig"], use_container_width=True)
 # @st.cache_data(show_spinner=False)
 def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40):
-    import io, imageio.v2 as imageio
+    import io
+    import imageio.v2 as imageio
     import plotly.graph_objects as go, plotly.io as pio
 
     def wrap_text(text, max_len):
+        """Insert <br> in text to wrap long titles."""
         words = text.split()
-        lines, current_line = [], ""
+        lines = []
+        current_line = ""
         for word in words:
             if len(current_line + " " + word) <= max_len:
                 current_line = f"{current_line} {word}".strip()
@@ -447,28 +429,40 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
         return "<br>".join(lines)
 
     images = []
-    x_min, x_max = (x.min(), x.max()) if x is not None else (None, None)
 
     for fr in plotly_frames:
         fig = go.Figure()
-        # Add prediction / true solution using helper
-        y_pred = np.array(fr.data[0].y if not is_system else fr.data[0].y)
-        y_true = np.array(fr.data[1].y) if len(fr.data) > 1 else None
-        add_frame_traces(fig, y_pred, y_true, x=x, is_system=is_system)
-
-        # Title
-        title_text = fr.layout.title.text if fr.layout.title and hasattr(fr.layout.title, "text") else ""
+        # Add each trace individually, preserving name and line style
+        for trace in fr.data:
+            fig.add_trace(go.Scatter(
+                x=trace.x,
+                y=trace.y,
+                mode=trace.mode,
+                name=trace.name or "",
+                line=trace.line if hasattr(trace, 'line') else None
+            ))
+        # Set the frame's title with font size and wrapping
+        if fr.layout.title and hasattr(fr.layout.title, 'text'):
+            wrapped_title = wrap_text(fr.layout.title.text, max_line_length)
+            fig.update_layout(title=dict(
+                text=wrapped_title,
+                x=0.5,  # center title
+                xanchor='center',
+                font=dict(size=16)
+            ))
+        # Fix x-axis range if not a system
+        if not is_system:
+            fig.update_layout(xaxis=dict(range=[x.min(), x.max()]))
+        # Ensure enough space for title
         fig.update_layout(
-            title=dict(text=wrap_text(title_text, max_line_length), x=0.5, xanchor='center', font=dict(size=16)),
-            width=800, height=600,
-            margin=dict(l=50, r=50, t=120, b=50)
+            width=800,
+            height=600,
+            margin=dict(l=50, r=50, t=120, b=50),  # t=120 gives more space for wrapped title
         )
-        if not is_system and x_min is not None and x_max is not None:
-            fig.update_layout(xaxis=dict(range=[x_min, x_max]))
-
+        # Convert figure to PNG bytes
         img_bytes = pio.to_image(fig, format="png")
         images.append(imageio.imread(io.BytesIO(img_bytes)))
-
+    # Save images to GIF
     gif_bytes = io.BytesIO()
     imageio.mimsave(gif_bytes, images, format="GIF", fps=fps, loop=0)
     gif_bytes.seek(0)
