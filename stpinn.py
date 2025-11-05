@@ -311,7 +311,7 @@ if solve_clicked:
         
 
         # build frames from each checkpoint
-        for checkpoint in checkpoints + [("final", y_trial)]:
+        for checkpoint in checkpoints + [("final", None)]:
             # checkpoints are pairs (epoch, intermediate solution)
             ck_fn = checkpoint[1] 
             nn_for_eval = ck_fn if ck_fn is not None else NN
