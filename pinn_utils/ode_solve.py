@@ -140,8 +140,7 @@ def ode_solve(
                 nn_copy = copy.deepcopy(NN)  # fresh network of same architecture
                 nn_copy.load_state_dict(state)
                 nn_copy.eval()
-                with torch.no_grad():
-                    return get_y_trial(a, ics, nn_copy)(x)
+                return get_y_trial(a, ics, nn_copy)(x)
 
             wrapped_checkpoints.append((epoch, trial))
 

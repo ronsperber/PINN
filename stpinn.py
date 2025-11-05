@@ -311,11 +311,9 @@ if solve_clicked:
         
 
         # build frames from each checkpoint
-        for checkpoint in checkpoints + [("final", None)]:
+        for checkpoint in checkpoints + [("final", y_trial)]:
             # checkpoints are pairs (epoch, intermediate solution)
-            ck_fn = checkpoint[1] 
-            nn_for_eval = ck_fn if ck_fn is not None else NN
-            y_fn = ode_solve.get_y_trial(x0, ics, nn_for_eval)
+            y_fn = checkpoint[1] 
             # ensure x_train requires grad for derivative computation
             x_for_eval = x_train.detach().clone().requires_grad_(True)
             # compute the ODE loss at each checkpoint
