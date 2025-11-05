@@ -2,6 +2,25 @@
 Metadata for all DE types in streamlit app
 used to create appropriate inputs in the sidebar
 and any logic needed for solver
+
+Schema for entry:
+order : int
+    order of the differential equation
+needs_k : bool
+    whether or not there's a parameter named 'k'
+needs_b_c : bool
+    whether or not there are the pair of parameters b,c
+x0_positive: bool
+    whether the equation is only defined on positive reals
+F_factory : callable    
+    function that defines the differential equation
+true_factory : callable
+    function which is the analytic solution to the DE
+ode_str : string
+    string for the DE used to label the graph
+is_system :  Optional bool
+    whether or not the DE is a system of equations.
+    If the key isn't present, the default is to treat it as False.
 """
 import numpy as np
 import torch

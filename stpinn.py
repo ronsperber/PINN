@@ -1,3 +1,4 @@
+# necessary imports
 import streamlit as st
 import pandas as pd
 import torch
@@ -20,7 +21,8 @@ with st.expander("Expand to see the mathematics behind this method.", expanded=F
     st.markdown(math_md)
 # Sidebar inputs driven by ODES metadata
 ode_choice = st.sidebar.selectbox("Choose ODE", list(ODES.keys()))
-
+# GIF generation doesn't work on streamlit cloud. Use the environment to determine if it's in the cloud
+# When it's in the cloud, the button is disabled
 on_streamlit_cloud = "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION" in os.environ
 if on_streamlit_cloud:
     make_gif = st.sidebar.checkbox(
@@ -36,9 +38,10 @@ else:
     value=False,
     help="Generating a GIF requires rendering each frame, which can take some time"
     )
+# get the metadata about the choice of DE
 meta = ODES[ode_choice]
 if meta.get("is_system", False):
-    # System inputs
+    # System inputs for systems
     A11 = st.sidebar.number_input("A₁₁", value=0.0)
     A12 = st.sidebar.number_input("A₂₁", value=1.0)
     A21 = st.sidebar.number_input("A₂₁", value=-1.0)
@@ -46,13 +49,13 @@ if meta.get("is_system", False):
     x0 = st.sidebar.number_input("t₀", value=0.0)
     y1_0 = st.sidebar.number_input("y₁(t₀)", value=1.0)
     y2_0 = st.sidebar.number_input("y₂(t₀)", value=0.0)
-    
     y0 = torch.tensor([y1_0, y2_0])
     x_start =st.sidebar.number_input("t_start", value=0.0)
     x_end = st.sidebar.number_input("t_end", value = x_start + 2.0)
     # non-applicable scalar ODE params
     k = b = c = yprime0 = None
 else:
+    # non systems
     # Small tolerance to avoid float-boundary validation edge-cases in Streamlit inputs
     EPS = 1e-9
     # non-applicable system ODE params
@@ -94,7 +97,7 @@ with st.sidebar.expander("Neural Network Parameters", expanded=False):
     lr = st.number_input("Learning rate", value=1e-3, format="%.5f")
     num_hidden_layers = st.number_input("Hidden layers", value=2, step=1)
     layer_width = st.number_input("Layer width", value=64, step=1,min_value=2,max_value=1024)
-    activation_options = st.selectbox("Activation function",
+    activation_option = st.selectbox("Activation function",
                                       [ "Tanh", "Sine", "Swish", "Softplus"],
                                       index=0)
 
@@ -118,7 +121,7 @@ params = {
     "A22": A22,
 }
 
-activation = activation_dict[activation_options]
+activation = activation_dict[activation_option]
 
 # Build a human-readable ODE string for titles
 ode = meta.get('ode_str', lambda **kw: ode_choice)(**params)
@@ -158,18 +161,11 @@ current_params = dict(
     lr=float(lr),
     num_hidden_layers=int(num_hidden_layers),
     layer_width=int(layer_width),
-    activation=activation_options
+    activation=activation_option
     )
 if 'last_params' not in st.session_state:
     st.session_state['last_params'] = current_params
 elif st.session_state['last_params'] != current_params:
-    print("=== Parameter differences detected ===")
-    for key in current_params:
-        old_val = st.session_state['last_params'].get(key)
-        new_val = current_params.get(key)
-        if old_val != new_val:
-            print(f"{key}: old={old_val} | new={new_val}")
-    print("====================================")
     # user changed parameters — clear any previously computed frames so chart doesn't persist
     st.session_state.pop('frames', None)
     st.session_state.pop('x_np', None)
@@ -178,20 +174,18 @@ elif st.session_state['last_params'] != current_params:
     st.session_state.pop('gif_bytes', None)
     st.session_state.pop('fig', None)
     st.session_state['last_params'] = current_params 
-
+# buttons to solve/reset
 col1, col2 = st.columns([1,1])
 with col1:
     solve_clicked = st.button("Solve")
 with col2:
     reset_clicked = st.button("Reset")
-
 if reset_clicked:
     # Clear previously computed frames and related UI state
     for k in ['frames', 'x_np', 'current_idx', 'slider_idx', 'last_slider_value', 'playing']:
         st.session_state.pop(k, None)
     st.session_state.pop('png_bytes', None)
     st.session_state.pop('gif_bytes', None)
-
 if solve_clicked:
     # Validate positive-domain requirements before running solver
     if meta.get('x0_positive', False) and x0 <= 0:
@@ -200,7 +194,7 @@ if solve_clicked:
         st.sidebar.error("This ODE requires the interval start to be > 0. Please set x start to a positive value.")
     else:
         # create the interval used to train the data
-        x_train = torch.linspace(x_start, x_end, n_points).reshape(-1, 1).requires_grad_(True)
+        x_train = torch.linspace(x_start, x_end, n_points).reshape(-1, 1)
         # Build F and true solution using ODES metadata
         meta = ODES[ode_choice]
         # Create the residual function F using the factory. Factories accept k, b, c etc and ignore extras.
@@ -211,17 +205,19 @@ if solve_clicked:
             true_sol = None
             true_factory_err = None
             try:
-                true_sol = true_factory(**params)
+                true_sol = true_factory(**params) # this is what should work 
             except Exception as e:
-                true_factory_err = e
+                true_factory_err = e # save exception 
                 try:
+                    # if params don't work with true_factory, attempt with just x0, y0
                     true_sol = true_factory(x0=x0, y0=y0)
                     true_factory_err = None
-                except Exception as e2:
+                except Exception as e2: # if this fails, save the exception message here and set the solution to None
                     true_factory_err = e2
                     true_sol = None
             # Report analytic-solution availability to the sidebar for debugging
             if true_sol is None:
+                # When no true solution has been found, show warning
                 st.sidebar.warning("Analytic true solution unavailable for selected parameters.")
                 if true_factory_err is not None:
                     st.sidebar.caption(f"True-factory error: {true_factory_err}")
@@ -230,7 +226,9 @@ if solve_clicked:
         else:
             true_sol = None
         # create the PINN to be used
+        # default is 1 output
         num_outputs = 1
+        # when we have a system, set number of outputs to 2
         if meta.get("is_system", False):
             num_outputs = 2
         NN = pinn.PINN(
@@ -305,42 +303,18 @@ if solve_clicked:
         # clear progress UI
         progress_bar.empty()
         progress_text.empty()
+        # save array of x as x_np and store in the state
         x_np = x_train.detach().numpy()
         st.session_state["x_np"] = x_np.flatten()
         # Build frames (prediction, optional true) and store in session_state
         frames = []
-        # helper to reconstruct a NN from checkpoint state (if provided)
-        def _nn_from_checkpoint_fn(ck_fn):
-            state = None
-            try:
-                defaults = ck_fn.__defaults__
-                if defaults and len(defaults) > 0:
-                    state = defaults[0]
-            except Exception:
-                state = None
-            if state is None:
-                return None
-            # build a fresh NN with same architecture
-            nn_copy = pinn.PINN(
-                num_hidden_layers=num_hidden_layers, 
-                layer_width=layer_width,
-                input_activation=activation,
-                hidden_activation=activation,
-                num_outputs=num_outputs
-            )
-            nn_copy.load_state_dict(state)
-            nn_copy.eval()
-            return nn_copy
+        
 
         # build frames from each checkpoint
         for checkpoint in checkpoints + [("final", y_trial)]:
             # checkpoints are pairs (epoch, intermediate solution)
             ck_fn = checkpoint[1] 
-            nn_for_eval = _nn_from_checkpoint_fn(ck_fn)
-            if nn_for_eval is None:
-                # final frame: use the trained NN instance
-                nn_for_eval = NN
-            # build a differentiable trial function from this NN so we can compute derivatives/residual
+            nn_for_eval = ck_fn if ck_fn is not None else NN
             y_fn = ode_solve.get_y_trial(x0, ics, nn_for_eval)
             # ensure x_train requires grad for derivative computation
             x_for_eval = x_train.detach().clone().requires_grad_(True)
