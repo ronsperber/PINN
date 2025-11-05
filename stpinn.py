@@ -1,6 +1,5 @@
 # necessary imports
 import streamlit as st
-import pandas as pd
 import torch
 import numpy as np
 import plotly.graph_objects as go
@@ -129,16 +128,32 @@ ode = meta.get('ode_str', lambda **kw: ode_choice)(**params)
 
 def to_serializable(val):
     """
-    convert tensors to lists for storing as session parameters
-    used so we can compare current to stored parameters 
+    convert any tensors in the parameters to lists
+    in order to save them as parameters and compare
+    to check if parameters changed
     """
     if torch.is_tensor(val):
-        return val.detach().cpu().numpy().tolist()  # convert to list
+        return val.detach().cpu().numpy().tolist()
     elif isinstance(val, (list, tuple)):
-        # if we have a list or tuple of parameters, make sure we convert each element
         return [to_serializable(v) for v in val]
+    return val
+def add_frame_traces(fig, y_pred, y_true=None, x=None, is_system=False):
+    """
+    Add prediction and optional true solution to a Plotly figure.
+    y_pred: np.ndarray
+    y_true: np.ndarray or None
+    x: 1D np.ndarray, only used for scalar ODEs
+    is_system: bool, whether this is a system of ODEs
+    """
+    if is_system:
+        fig.add_trace(go.Scatter(x=y_pred[:, 0], y=y_pred[:, 1], mode='lines', name='Prediction'))
+        if y_true is not None:
+            fig.add_trace(go.Scatter(x=y_true[:, 0], y=y_true[:, 1], mode='lines', name='True Solution', line=dict(dash='dash')))
     else:
-        return val
+        fig.add_trace(go.Scatter(x=x, y=y_pred.flatten(), mode='lines', name='Prediction'))
+        if y_true is not None:
+            fig.add_trace(go.Scatter(x=x, y=y_true.flatten(), mode='lines', name='True Solution', line=dict(dash='dash')))
+
 
 # Detect sidebar parameter changes and clear previous frames if any parameter changed
 # current_params holds all sidebar parameters
@@ -182,7 +197,7 @@ with col2:
     reset_clicked = st.button("Reset")
 if reset_clicked:
     # Clear previously computed frames and related UI state
-    for k in ['frames', 'x_np', 'current_idx', 'slider_idx', 'last_slider_value', 'playing']:
+    for k in ['frames', 'plotly_frames', 'x_np', 'x_np_flat', 'current_idx', 'slider_idx', 'last_slider_value', 'playing', 'fig']:
         st.session_state.pop(k, None)
     st.session_state.pop('png_bytes', None)
     st.session_state.pop('gif_bytes', None)
@@ -201,20 +216,13 @@ if solve_clicked:
         F = meta['F_factory'](**params)
         # Build true solution if factory provided
         true_factory = meta.get('true_factory')
+        true_sol = None
         if callable(true_factory):
-            true_sol = None
             true_factory_err = None
             try:
-                true_sol = true_factory(**params) # this is what should work 
+                true_sol = true_factory(**params)
             except Exception as e:
-                true_factory_err = e # save exception 
-                try:
-                    # if params don't work with true_factory, attempt with just x0, y0
-                    true_sol = true_factory(x0=x0, y0=y0)
-                    true_factory_err = None
-                except Exception as e2: # if this fails, save the exception message here and set the solution to None
-                    true_factory_err = e2
-                    true_sol = None
+                true_factory_err = e
             # Report analytic-solution availability to the sidebar for debugging
             if true_sol is None:
                 # When no true solution has been found, show warning
@@ -223,8 +231,6 @@ if solve_clicked:
                     st.sidebar.caption(f"True-factory error: {true_factory_err}")
             else:
                 st.sidebar.success("Analytic true solution built.")
-        else:
-            true_sol = None
         # create the PINN to be used
         # default is 1 output
         num_outputs = 1
@@ -268,20 +274,13 @@ if solve_clicked:
             for displaying progress and ETA
             """
             # epoch ranges from 1..epochs; clamp and compute fraction
-            try:
-                frac = min(max(epoch / max(1, int(epochs)), 0.0), 1.0)
-            except Exception:
-                frac = 0.0
+            frac = min(max(epoch / max(1, int(epochs)), 0.0), 1.0)
             progress_bar.progress(int(frac * 100))
             # estimate remaining time based on avg seconds per epoch so far
             elapsed = time.time() - start_time
             eta = None
-            try:
-                if epoch > 0:
-                    avg = elapsed / epoch
-                    eta = avg * max(0, int(epochs) - epoch)
-            except Exception:
-                eta = None
+            avg = elapsed / epoch if epoch else 0
+            eta = avg * (epochs - epoch) if epoch else 0
             eta_str = _format_seconds(eta) if eta is not None else "-"
             progress_text.text(f"Epoch {epoch}/{epochs} — train_loss: {train_loss:.6e}, val_loss: {val_loss:.6e} — ETA: {eta_str}")
 
@@ -305,28 +304,25 @@ if solve_clicked:
         progress_text.empty()
         # save array of x as x_np and store in the state
         x_np = x_train.detach().numpy()
-        st.session_state["x_np"] = x_np.flatten()
+        x_np_flat = x_np.flatten()
+        st.session_state["x_np"] = x_np
+        st.session_state["x_np_flat"] = x_np_flat
         # Build frames (prediction, optional true) and store in session_state
         frames = []
-        
-
+        # ensure x_train requires grad for derivative computation
+        x_for_eval = x_train.detach().clone().requires_grad_(True)
         # build frames from each checkpoint
         for checkpoint in checkpoints + [("final", y_trial)]:
             # checkpoints are pairs (epoch, intermediate solution)
             y_fn = checkpoint[1] 
-            # ensure x_train requires grad for derivative computation
-            x_for_eval = x_train.detach().clone().requires_grad_(True)
             # compute the ODE loss at each checkpoint
             y_torch = y_fn(x_for_eval)
             derivs = derivatives.derivatives(y_torch, x_for_eval, len(ics))
-            try:
-                res = F(x_for_eval, *derivs)
-                ode_loss = float(torch.mean(res**2).item())
-            except Exception as e:
-                ode_loss = None
+            res = F(x_for_eval, *derivs)
+            ode_loss = float(torch.mean(res**2).item()) if res is not None else None
             y_pred = y_torch.detach().numpy()
             # many analytic factories expect a 1-D numpy array; flatten to be safe
-            y_true = true_sol(x_np.flatten()) if true_sol is not None else None
+            y_true = true_sol(x_np_flat) if true_sol is not None else None
             if isinstance(checkpoint[0], int):
                 title = f"Solution to {ode}, y({x0}) = {y0}\nEpoch {checkpoint[0]}"
                 epoch_val = int(checkpoint[0])
@@ -345,10 +341,9 @@ if solve_clicked:
         st.session_state.pop('gif_bytes', None)
 if 'frames' in st.session_state:
     frames = st.session_state['frames']
-    x_np = st.session_state['x_np']
+    x = st.session_state['x_np_flat']
     n_frames = len(frames)
     # Prepare Plotly animated figure 
-    x = x_np.flatten()
     has_true = any(fr['y_true'] is not None for fr in frames)
     # Initialize figure using the final frame so users see the final solution by default
     final_idx = n_frames - 1
@@ -413,8 +408,6 @@ if 'frames' in st.session_state:
     n_frames = len(frames)
     duration_ms = max(10, min(200, int(5000 / n_frames)))
     st.session_state["plotly_frames"] = plotly_frames
-    
-    
     # Use epoch labels on the slider steps (show 'Epoch N' or 'Final')
     steps = []
     for i, fr in enumerate(frames):
@@ -438,17 +431,12 @@ if st.session_state.get("fig") is not None:
     st.plotly_chart(st.session_state["fig"], use_container_width=True)
 # @st.cache_data(show_spinner=False)
 def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40):
-    import io
-    import imageio.v2 as imageio
+    import io, imageio.v2 as imageio
     import plotly.graph_objects as go, plotly.io as pio
 
-
-
     def wrap_text(text, max_len):
-        """Insert <br> in text to wrap long titles."""
         words = text.split()
-        lines = []
-        current_line = ""
+        lines, current_line = [], ""
         for word in words:
             if len(current_line + " " + word) <= max_len:
                 current_line = f"{current_line} {word}".strip()
@@ -459,64 +447,44 @@ def frames_to_gif(plotly_frames, x, fps=10, is_system=False, max_line_length=40)
         return "<br>".join(lines)
 
     images = []
+    x_min, x_max = (x.min(), x.max()) if x is not None else (None, None)
 
     for fr in plotly_frames:
         fig = go.Figure()
+        # Add prediction / true solution using helper
+        y_pred = np.array(fr.data[0].y if not is_system else fr.data[0].y)
+        y_true = np.array(fr.data[1].y) if len(fr.data) > 1 else None
+        add_frame_traces(fig, y_pred, y_true, x=x, is_system=is_system)
 
-        # Add each trace individually, preserving name and line style
-        for trace in fr.data:
-            fig.add_trace(go.Scatter(
-                x=trace.x,
-                y=trace.y,
-                mode=trace.mode,
-                name=trace.name or "",
-                line=trace.line if hasattr(trace, 'line') else None
-            ))
-
-        # Set the frame's title with font size and wrapping
-        if fr.layout.title and hasattr(fr.layout.title, 'text'):
-            wrapped_title = wrap_text(fr.layout.title.text, max_line_length)
-            fig.update_layout(title=dict(
-                text=wrapped_title,
-                x=0.5,  # center title
-                xanchor='center',
-                font=dict(size=16)
-            ))
-
-        # Fix x-axis range if not a system
-        if not is_system:
-            fig.update_layout(xaxis=dict(range=[x.min(), x.max()]))
-
-        # Ensure enough space for title
+        # Title
+        title_text = fr.layout.title.text if fr.layout.title and hasattr(fr.layout.title, "text") else ""
         fig.update_layout(
-            width=800,
-            height=600,
-            margin=dict(l=50, r=50, t=120, b=50),  # t=120 gives more space for wrapped title
+            title=dict(text=wrap_text(title_text, max_line_length), x=0.5, xanchor='center', font=dict(size=16)),
+            width=800, height=600,
+            margin=dict(l=50, r=50, t=120, b=50)
         )
+        if not is_system and x_min is not None and x_max is not None:
+            fig.update_layout(xaxis=dict(range=[x_min, x_max]))
 
-        # Convert figure to PNG bytes
         img_bytes = pio.to_image(fig, format="png")
         images.append(imageio.imread(io.BytesIO(img_bytes)))
 
-    # Save images to GIF
     gif_bytes = io.BytesIO()
     imageio.mimsave(gif_bytes, images, format="GIF", fps=fps, loop=0)
     gif_bytes.seek(0)
     return gif_bytes
 
-
-
 # only generate GIF if user requested it
-if make_gif and 'plotly_frames' in st.session_state:
+if make_gif and 'plotly_frames' in st.session_state and 'gif_bytes' not in st.session_state:
     with st.spinner("Generating animation GIF..."):
         gif_bytes = frames_to_gif(
             st.session_state['plotly_frames'],
-            st.session_state['x_np'],
+            st.session_state['x_np_flat'],
             fps=10,
             is_system=meta.get("is_system", False)
         )
         st.session_state['gif_bytes'] = gif_bytes
-
+if 'gif_bytes' in st.session_state:
     st.download_button(
         label="Download GIF",
         data=st.session_state['gif_bytes'],
