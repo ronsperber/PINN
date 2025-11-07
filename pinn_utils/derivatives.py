@@ -16,32 +16,22 @@ def derivatives(y: torch.Tensor, x: torch.Tensor, order: int) -> List[torch.Tens
     
     for _ in range(order):
         current = derivs[-1]
-        
-        # Handle multi-dimensional output
-        if current.ndim > 1 and current.shape[1] > 1:
-            # Compute derivative of each output component separately
-            dy_dx_components = []
-            for i in range(current.shape[1]):
-                # compute dy_i/dx
-                grad = torch.autograd.grad(
-                    outputs=current[:, i],
-                    inputs=x,
-                    grad_outputs=torch.ones(current.shape[0], device=current.device),
-                    create_graph=True,
-                    retain_graph=True
-                )[0]
-                dy_dx_components.append(grad)
-            # turn dy/dx into a tensor 
-            dy_dx = torch.cat(dy_dx_components, dim=1)
-        else:
-            # Scalar case
-            dy_dx = torch.autograd.grad(
-                outputs=current,
+        if current.ndim == 1:
+            current = current.unsqueeze(-1)
+        # Compute derivative of each output component separately
+        dy_dx_components = []
+        for i in range(current.shape[1]):
+            # compute dy_i/dx
+            grad = torch.autograd.grad(
+                outputs=current[:, i],
                 inputs=x,
-                grad_outputs=torch.ones_like(current),
-                create_graph=True
+                grad_outputs=torch.ones(current.shape[0], device=current.device),
+                create_graph=True,
+                retain_graph=True
             )[0]
-        
+            dy_dx_components.append(grad)
+            # turn dy/dx into a tensor 
+        dy_dx = torch.cat(dy_dx_components, dim=1)
         derivs.append(dy_dx)
     
     return derivs  # [y, y', y'', ..., y^(order)]
