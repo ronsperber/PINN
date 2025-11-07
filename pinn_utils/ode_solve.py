@@ -81,7 +81,7 @@ def ode_solve(
         F : Callable,
         a : float,
         ics : List[float | torch.Tensor],
-        X : torch.Tensor | List[torch.Tensor],
+        X : torch.Tensor,
         NN : PINN,
         return_checkpoints : bool = False,
         **train_args : dict
@@ -114,9 +114,10 @@ def ode_solve(
         of pairs (epoch, trial) where trial is intermediate
         solution at epoch
     """
-
+    # make sure that X is two dimensional
+    X = X.unsqueeze(-1) if X.ndim == 1 else X
+    # get the loss function
     loss_fn = get_loss(a, ics, NN, F)
-    
     # Run the generic training loop
     result = train(
         NN=NN,
