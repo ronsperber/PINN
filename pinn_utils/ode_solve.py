@@ -109,7 +109,7 @@ def ode_solve(
     -------
     solution: Callable
         the solution to the ODE that's y_trial(a, ics, NN)
-    checkpoints (optional) : List[ tuple(int, callable
+    checkpoints (optional) : List[ tuple(int, callable) ]
         when return_checkpoints is true, a list
         of pairs (epoch, trial) where trial is intermediate
         solution at epoch
