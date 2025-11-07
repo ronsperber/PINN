@@ -103,7 +103,7 @@ def ode_solve(
     return_checkpoints : bool
         whether or not to return intermediate solutions
     **solve_args: dict
-        other arguments that can be passed directly to solve
+        other arguments that can be passed directly to train
     
     Returns
     -------
