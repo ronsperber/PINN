@@ -84,7 +84,7 @@ def ode_solve(
         X : torch.Tensor | List[torch.Tensor],
         NN : PINN,
         return_checkpoints : bool = False,
-        **solve_args : dict
+        **train_args : dict
 ):
     """
     Wrapper to call solve for an ODE
@@ -102,7 +102,7 @@ def ode_solve(
         PINN to train to solve the DE
     return_checkpoints : bool
         whether or not to return intermediate solutions
-    **solve_args: dict
+    **train_args: dict
         other arguments that can be passed directly to train
     
     Returns
@@ -123,7 +123,7 @@ def ode_solve(
         X=X,
         loss_fn=loss_fn,
         return_checkpoints=return_checkpoints,
-        **solve_args
+        **train_args
     )
 
     # Wrap checkpoints so each stores only state_dict
