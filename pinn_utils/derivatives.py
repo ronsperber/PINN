@@ -109,29 +109,6 @@ def compute_unique_derivatives(f, x, order=2):
 
     return derivs_per_output
 
-def compute_vector_derivatives(u: Callable, X:torch.tensor, order:int = 2) -> List[dict]:
-    """
-    computes a list of partial derivatives for each component of a vector valued function
-    Parameters
-    ---------
-    u: Callable
-        vector valued function that we want partial derivatives for
-    X : torch.tensor
-        where the derivatives are to be evaluated
-    order : int
-        maximum order of derivates wanted
-    returns
-    all_derivs : List[dict]
-        List of derivative dicts. each element in the list 
-        corresponds to one component
-    """
-    num_outputs = u(X).shape[1]
-    all_derivs = []
-    for i in range(num_outputs):
-        yi = lambda x: u(x)[:, i:i+1]
-        derivs = compute_unique_derivatives(yi, X, order=order)[0]
-        all_derivs.append(derivs)
-    return all_derivs
 
 def jacobian(u, X):
     """
@@ -149,7 +126,7 @@ def jacobian(u, X):
     J: tensor of shape (batch_size, n, m)
         J[i,j,k] = d(u_j)/d(x_k) evaluated at batch element i
     """
-    derivs_list = compute_vector_derivatives(u, X, order=1)  # list of dicts, length n
+    derivs_list = compute_unique_derivatives(u, X, order=1)  # list of dicts, length n
     n = len(derivs_list)
     m = len(derivs_list[0]) - 1  # number of input variables
     batch_size = X.shape[0]
