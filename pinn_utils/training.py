@@ -8,7 +8,7 @@ import numpy as np, pandas as pd
 import copy
 from typing import List, Callable, TypeAlias
 
-TensorLike: TypeAlias = torch.Tensor | np.ndarray | pd.DataFrame
+TensorLike: TypeAlias = torch.Tensor | np.ndarray | pd.DataFrame | pd.Series
 TensorListLike: TypeAlias = TensorLike | list[TensorLike] | tuple[TensorLike, ...]
 
 def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
@@ -31,10 +31,13 @@ def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
     for x in X:
         if isinstance(x, pd.DataFrame):
             x = torch.tensor(x.values, dtype=torch.float32)
+        elif isinstance(x, pd.Series):
+            x = torch.tensor(x.values, dtype=torch.float32)
         elif isinstance(x, np.ndarray):
             x = torch.tensor(x, dtype=torch.float32)
         elif not torch.is_tensor(x):
             raise TypeError(f"Unsupported input type: {type(x)}")
+        x = x.unsqueeze(-1) if x.ndim == 1 else x
         processed_X.append(x)
     return processed_X
 
