@@ -34,13 +34,6 @@ def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=No
         A function that can be passed directly to `train()`.
     """
 
-    # record what argument order this loss expects
-    expected_keys = ["de"]
-    if ic_conditions is not None:
-        expected_keys.append("ic")
-    if bc_conditions is not None:
-        expected_keys.append("bc")
-
     def loss_fn(*X_sets):
         idx = 0
         total_loss = 0.0
@@ -55,22 +48,22 @@ def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=No
         if ic_conditions is not None:
             for (X_ic, ic_residual_fn, *maybe_weight) in ic_conditions:
                 weight = maybe_weight[0] if maybe_weight else 1.0
-                u_ic_eval = ic_residual_fn(NN, X_ic)
+                X_ic_batch = X_sets[idx]
+                u_ic_eval = ic_residual_fn(NN, X_ic_batch)
                 total_loss += weight * torch.mean(u_ic_eval**2)
-            idx += 1
+                idx += 1
 
         # Boundary conditions
         if bc_conditions is not None:
             for (X_bc, bc_residual_fn, *maybe_weight) in bc_conditions:
                 weight = maybe_weight[0] if maybe_weight else 1.0
-                u_bc_eval = bc_residual_fn(NN, X_bc)
+                X_bc_batch = X_sets[idx]
+                u_bc_eval = bc_residual_fn(NN, X_bc_batch)
                 total_loss += weight * torch.mean(u_bc_eval**2)
-            idx += 1
+                idx += 1
 
         return total_loss
-
-    # attach expected_keys for consistency
-    loss_fn.expected_keys = expected_keys
+    
     return loss_fn
 
 def pde_solve(
@@ -115,10 +108,12 @@ def pde_solve(
     )
     # create the list of tensors for X to be passed to train()
     X = [X_DE] # start with the set for the DE
-    for ic in IC_list:
-        X.append(ic[0]) # add the IC training sets
-    for bc in BC_list:
-        X.append(bc[0]) # add the BC training sets
+    if IC_list is not None:
+        for ic in IC_list:
+            X.append(ic[0]) # add the IC training sets
+    if BC_list is not None:
+        for bc in BC_list:
+            X.append(bc[0]) # add the BC training sets
     # set batch mode to random unless set specifically to shuffle by the user
     batch_mode = train_params.get("batch_mode", "random")
     # train the neural network
