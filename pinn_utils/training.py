@@ -14,7 +14,7 @@ TensorListLike: TypeAlias = TensorLike | list[TensorLike] | tuple[TensorLike, ..
 def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
     """
     function to turn the arguments to train() to be a list of
-    torch.Tensors
+    torch.Tensors that have at least 2 dimensions
     Parameters
     ----------
     X : TensorListLike
@@ -47,6 +47,8 @@ def train(
           loss_fn : Callable,
           epochs: int = 5000,
           lr: float = 1e-3,
+          optimizer_cls: type = torch.optim.Adam,  
+          optimizer_kwargs: dict | None = None,   
           batch_size: int | None= None,
           batch_mode: str = "shuffle",
           use_grad : bool = False,
@@ -60,6 +62,15 @@ def train(
           ):
     """
     trains a neural network with training data and loss function provided
+    
+    Notes
+    -----
+    - Input tensors are normalized to be at least 2D before any train/val split.
+    - The `requires_grad` flag (controlled by `use_grad`) is applied *after*
+      splitting, to avoid issues with graph retention.
+    - The loss function is responsible for handling target shape
+      conventions (e.g., squeeze/unsqueeze as needed).
+
     Parameters
     ----------
     NN : nn.Module
@@ -72,6 +83,10 @@ def train(
         number of epochs to train
     lr : float
         learning rate
+    optimizer_cls : type
+        which optimizer to use (Adam is default)
+    optimizer_kwargs: dict | None
+        when not None additional arguments to pass to the optimizer
     batch_size : int | None
         when not None, the size of batches to use during training
         otherwise training is done on the whole data set at once each epoch
@@ -136,7 +151,7 @@ def train(
         X_val = [x[perm[:val_size]].requires_grad_(use_grad) for x in X]
         X_train = [x[perm[val_size:]].requires_grad_(use_grad) for x in X]
     else:
-        X_train =[x.requires_grad_(True) for x in X]
+        X_train =[x.requires_grad_(use_grad) for x in X]
         X_val = None
     if return_checkpoints:
         checkpoints = []
@@ -152,7 +167,9 @@ def train(
         epochs_since_best = 0
         best_weights = None
     # initialize optimizer
-    optimizer = torch.optim.Adam(params=NN.parameters(), lr=lr)
+    if optimizer_kwargs is None:
+        optimizer_kwargs = {}
+    optimizer = optimizer_cls(params=NN.parameters(), lr=lr, **optimizer_kwargs)
     # training loop
     with tqdm(total=epochs, desc="Training", unit="epoch") as pbar:
         for epoch in range(1, epochs + 1):
