@@ -122,6 +122,7 @@ def pde_solve(
         loss_fn=loss_fn,
         X=X,
         use_val=False,
+        use_grad=True,
         batch_mode=batch_mode,
         **train_params
     )

@@ -124,6 +124,7 @@ def ode_solve(
         X=X,
         loss_fn=loss_fn,
         return_checkpoints=return_checkpoints,
+        use_grad=True,
         **train_args
     )
 

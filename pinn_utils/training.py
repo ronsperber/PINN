@@ -49,6 +49,7 @@ def train(
           lr: float = 1e-3,
           batch_size: int | None= None,
           batch_mode: str = "shuffle",
+          use_grad : bool = False,
           use_val: bool = True,
           val_size: float | int = 0.2,
           early_stopping: int | None = None,
@@ -77,6 +78,8 @@ def train(
     batch_mode : str
         When the mode is "shuffle" the datasets are shuffled and broken into batch_size size subsets
         When the mode is "random" each epoch we randomly sample a bunch of batch_size each 'batch'
+    use_grad : bool
+        whether or not the data sets should require grad (typically used for PINN)
     use_val : bool
         whether or not to split into train/validation sets
     val_size: int | float
@@ -130,8 +133,8 @@ def train(
                 X[i] = x.detach().clone().requires_grad_(False)
         # generate train/validation split based on val_size
         perm = torch.randperm(data_size)
-        X_val = [x[perm[:val_size]].requires_grad_(True) for x in X]
-        X_train = [x[perm[val_size:]].requires_grad_(True) for x in X]
+        X_val = [x[perm[:val_size]].requires_grad_(use_grad) for x in X]
+        X_train = [x[perm[val_size:]].requires_grad_(use_grad) for x in X]
     else:
         X_train =[x.requires_grad_(True) for x in X]
         X_val = None
