@@ -83,3 +83,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pinn_utils/"]
+
+[dependency-groups]
+dev = [
+    "isort>=8.0.1",
+]

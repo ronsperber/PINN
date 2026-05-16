@@ -1,6 +1,7 @@
 """
 module to train a PyTorch neural network
 """
+
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -10,6 +11,7 @@ from typing import List, Callable, TypeAlias
 
 TensorLike: TypeAlias = torch.Tensor | np.ndarray | pd.DataFrame | pd.Series
 TensorListLike: TypeAlias = TensorLike | list[TensorLike] | tuple[TensorLike, ...]
+
 
 def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
     """
@@ -23,7 +25,7 @@ def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
     -------
     List of tensors
     """
-    # if a single type was passed, convert to a list 
+    # if a single type was passed, convert to a list
     if not isinstance(X, (list, tuple)):
         X = [X]
     # convert all elements of X to torch tensors
@@ -41,28 +43,29 @@ def process_training_data(X: TensorListLike) -> List[torch.Tensor]:
         processed_X.append(x)
     return processed_X
 
+
 def train(
-          NN: nn.Module,
-          X: TensorListLike,
-          loss_fn : Callable,
-          epochs: int = 5000,
-          lr: float = 1e-3,
-          optimizer_cls: type = torch.optim.Adam,  
-          optimizer_kwargs: dict | None = None,   
-          batch_size: int | None= None,
-          batch_mode: str = "shuffle",
-          use_grad : bool = False,
-          use_val: bool = True,
-          val_size: float | int = 0.2,
-          early_stopping: int | None = None,
-          return_checkpoints: bool = False,
-          checkpoint_every: int = 20,
-          progress_callback: Callable[[int, float, float], None] |None = None,
-          progress_every: int = 1
-          ):
+    NN: nn.Module,
+    X: TensorListLike,
+    loss_fn: Callable[..., torch.Tensor],
+    epochs: int = 5000,
+    lr: float = 1e-3,
+    optimizer_cls: Callable[..., torch.optim.Optimizer] = torch.optim.Adam,
+    optimizer_kwargs: dict | None = None,
+    batch_size: int | None = None,
+    batch_mode: str = "shuffle",
+    use_grad: bool = False,
+    use_val: bool = True,
+    val_size: float | int = 0.2,
+    early_stopping: dict | None = None,
+    return_checkpoints: bool = False,
+    checkpoint_every: int = 20,
+    progress_callback: Callable[[int, float, float], None] | None = None,
+    progress_every: int = 1,
+) -> list[tuple[int, nn.Module]]:
     """
     trains a neural network with training data and loss function provided
-    
+
     Notes
     -----
     - Input tensors are normalized to be at least 2D before any train/val split.
@@ -74,10 +77,10 @@ def train(
     Parameters
     ----------
     NN : nn.Module
-        a neural network of type nn.Module.  
+        a neural network of type nn.Module.
     X : TensorListLike
         the training data
-    loss_fn : Callable
+    loss_fn : Callable[..., torch.Tensor]
         loss function to use during training.
     epochs : int
         number of epochs to train
@@ -113,29 +116,31 @@ def train(
         when not None, is a function used to send progress to whatever is calling solve
     progress_every : int
         when there is a progress_callback, how often to call it
-    
+
     Returns
     -------
-    checkpoints : List[Tuple(int,callable)] | None:
-        when return_checkpoints is true a list of pairs (epoch, solution at epoch)
-        otherwise returns None
+    checkpoints : list[tuple[int, nn.Module]]
+        list of (epoch, network snapshot) pairs at each checkpoint interval;
+        empty when return_checkpoints is False
     """
-    
-    # replace X with list of things that are all tensors
-    X = process_training_data(X)
+
+    # normalize inputs to a list of 2-D tensors
+    X_tensors: List[torch.Tensor] = process_training_data(X)
     # make sure all data sets have the same number of training points
     if use_val:
-        batch_sizes = [x.shape[0] for x in X]
+        batch_sizes = [x.shape[0] for x in X_tensors]
         if len(set(batch_sizes)) != 1:
-            raise ValueError(f"All elements in X must have the same batch size, got {batch_sizes}")
+            raise ValueError(
+                f"All elements in X must have the same batch size, got {batch_sizes}"
+            )
         # get number of points being used
-        data_size = X[0].shape[0]
+        data_size = X_tensors[0].shape[0]
         # make sure val_size is a valid input
         if isinstance(val_size, int):
-            if val_size <=0 or val_size >= data_size:
+            if val_size <= 0 or val_size >= data_size:
                 raise ValueError("Not a valid validation size")
         elif isinstance(val_size, float):
-            if val_size <=0 or val_size >= 1:
+            if val_size <= 0 or val_size >= 1:
                 raise ValueError("Not a valid validation size")
             else:
                 # when it's a float get the actual size of the validation set
@@ -143,29 +148,26 @@ def train(
         else:
             raise TypeError("Validation size must be int or float")
         # get rid of requires_grad on x if true so it can be split
-        for i,x in enumerate(X):
+        for i, x in enumerate(X_tensors):
             if x.requires_grad:
-                X[i] = x.detach().clone().requires_grad_(False)
+                X_tensors[i] = x.detach().clone().requires_grad_(False)
         # generate train/validation split based on val_size
         perm = torch.randperm(data_size)
-        X_val = [x[perm[:val_size]].requires_grad_(use_grad) for x in X]
-        X_train = [x[perm[val_size:]].requires_grad_(use_grad) for x in X]
+        X_val = [x[perm[:val_size]].requires_grad_(use_grad) for x in X_tensors]
+        X_train = [x[perm[val_size:]].requires_grad_(use_grad) for x in X_tensors]
     else:
-        X_train =[x.requires_grad_(use_grad) for x in X]
+        X_train = [x.requires_grad_(use_grad) for x in X_tensors]
         X_val = None
-    if return_checkpoints:
-        checkpoints = []
-    else:
-        checkpoints = None
+    checkpoints: list[tuple[int, nn.Module]] = []
     train_size = X_train[0].shape[0]
-    # when there's early stopping get min_epochs, patience
-    # and set up best loss and epochs since best
+    min_epochs: int = 0
+    patience: int = 0
+    best_val_loss: float = float('inf')
+    epochs_since_best: int = 0
+    best_weights: dict | None = None
     if early_stopping is not None:
         min_epochs = early_stopping.get('min_epochs', 20)
         patience = early_stopping.get('patience', 10)
-        best_val_loss = float('inf')
-        epochs_since_best = 0
-        best_weights = None
     # initialize optimizer
     if optimizer_kwargs is None:
         optimizer_kwargs = {}
@@ -191,7 +193,7 @@ def train(
                 # each batch run backpropogation
                 for i in range(0, train_size, batch_size):
                     optimizer.zero_grad()
-                    end = min(i+batch_size, train_size)
+                    end = min(i + batch_size, train_size)
                     idx = perm[i:end]
                     X_batch = [x_train[idx] for x_train in X_train]
                     loss = loss_fn(*X_batch)
@@ -203,10 +205,12 @@ def train(
                 # set epoch loss to zero
                 epoch_loss = 0.0
                 # get a number of batches based on largest training set and batch size
-                num_batches = max([ x.shape[0] for x in X_train]) // batch_size
+                num_batches = max([x.shape[0] for x in X_train]) // batch_size
                 for _ in range(num_batches):
                     # get a random sample of batch_size from each X in X_train
-                    X_batch = [x[torch.randint(0, x.shape[0], (batch_size,))] for x in X_train]
+                    X_batch = [
+                        x[torch.randint(0, x.shape[0], (batch_size,))] for x in X_train
+                    ]
                     optimizer.zero_grad()
                     loss = loss_fn(*X_batch)
                     loss.backward()
@@ -214,20 +218,26 @@ def train(
                     epoch_loss += loss.item()
                 epoch_loss /= num_batches
             else:
-                raise ValueError(f"{batch_mode} is not a valid mode. Mode must be 'random' or 'shuffle'")
+                raise ValueError(
+                    f"{batch_mode} is not a valid mode. Mode must be 'random' or 'shuffle'"
+                )
             # compute loss on validation set
             # set NN to eval for this
             NN.eval()
-            if use_val:
+            if use_val and X_val is not None:
                 val_loss = loss_fn(*X_val).item()
             else:
-                val_loss = float('nan')
+                val_loss = float("nan")
             # Call progress callback if provided (epoch, train_loss, val_loss)
             if progress_callback is not None:
                 try:
                     # Only invoke callback every `progress_every` epochs to reduce UI churn,
                     # but always call on the final epoch so the UI can show completion.
-                    if progress_every <= 1 or (epoch % progress_every == 0) or (epoch == epochs):
+                    if (
+                        progress_every <= 1
+                        or (epoch % progress_every == 0)
+                        or (epoch == epochs)
+                    ):
                         progress_callback(epoch, float(epoch_loss), float(val_loss))
                 except Exception:
                     # Ensure progress callback failures don't stop training
@@ -238,11 +248,16 @@ def train(
                     if val_loss < best_val_loss:
                         best_val_loss = val_loss
                         epochs_since_best = 0
-                        best_weights = {k: v.clone().detach() for k, v in NN.state_dict().items()}
+                        best_weights = {
+                            k: v.clone().detach() for k, v in NN.state_dict().items()
+                        }
                     else:
                         epochs_since_best += 1
                     if epochs_since_best >= patience and epoch >= min_epochs:
-                        print(f"Early stopping at epoch {epoch}, validation loss did not improve for {early_stopping['patience']} epochs")
+                        print(
+                            f"Early stopping at epoch {epoch}, validation loss did not improve for {early_stopping['patience']} epochs"
+                        )
+                        assert best_weights is not None
                         NN.load_state_dict(best_weights)
                         break
             # put back into training
@@ -253,7 +268,7 @@ def train(
             if return_checkpoints and epoch % checkpoint_every == 0:
                 checkpoint_state = {k: v.clone() for k, v in NN.state_dict().items()}
                 # create a function that uses a fresh NN with these weights
-                nn_copy = copy.deepcopy(NN)       # or create a new PINN instance
+                nn_copy = copy.deepcopy(NN)  # or create a new PINN instance
                 nn_copy.load_state_dict(checkpoint_state)
                 nn_copy.eval()
                 checkpoints.append((epoch, nn_copy))

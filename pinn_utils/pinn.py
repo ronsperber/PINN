@@ -14,11 +14,11 @@ class PINN(nn.Module):
                  num_hidden_layers:int = 2,
                  layer_width:int = 64,
                  input_activation: Callable[[torch.Tensor], torch.Tensor] = nn.Tanh(),
-                 hidden_activation: Callable[[torch.Tensor], torch.Tensor] | List= nn.Tanh(),
+                 hidden_activation: Callable[[torch.Tensor], torch.Tensor] | List[Callable[[torch.Tensor], torch.Tensor]] = nn.Tanh(),
                  output_activation: Callable[[torch.Tensor], torch.Tensor] = nn.Identity(),
                  num_inputs:int = 1,
                  num_outputs:int = 1
-    ):
+    ) -> None:
         """
         Parameters
         num_hidden_layers: int
@@ -57,7 +57,8 @@ class PINN(nn.Module):
         self.output_activation = output_activation
         
 
-    def forward(self, x:torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through input, hidden, and output layers."""
         x = self.input_activation(self.input_layer(x))
         for i,layer in enumerate(self.hidden_layers):
             x = self.hidden_activation[i](layer(x))

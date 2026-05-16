@@ -82,15 +82,29 @@ DE_TESTS = [
     )
 ]
 
-@pytest.mark.parametrize("solver,residual,param_dict,order", [
+_parametrize_cases = [
     (solver, residual, params, order)
     for solver, residual, param_list, order in DE_TESTS
     for params in param_list
-])
+]
 
+@pytest.mark.parametrize("solver,residual,param_dict,order", _parametrize_cases)
 def test_all_DEs(solver, residual, param_dict, order, atol=5e-5):
     y_true = solver(**param_dict)
     x0 = param_dict.get("x0", 0.0)
     xs = np.linspace(x0 - 0.5, x0 + 0.5, 50)
     res = residual(y_true, xs, **{k: v for k,v in param_dict.items() if k not in ("x0","y0","yprime0")})
     assert np.max(np.abs(res)) < atol
+
+
+@pytest.mark.parametrize("solver,param_dict,order", [
+    (solver, params, order)
+    for solver, residual, params, order in _parametrize_cases
+])
+def test_initial_conditions(solver, param_dict, order):
+    y_true = solver(**param_dict)
+    x0 = param_dict["x0"]
+    assert np.abs(y_true(x0) - param_dict["y0"]) < 1e-10
+    if order == 2:
+        dy_x0 = numerical_derivative(y_true, x0)
+        assert np.abs(dy_x0 - param_dict["yprime0"]) < 1e-5

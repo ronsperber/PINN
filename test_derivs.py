@@ -1,6 +1,6 @@
 import torch
 import math
-from pinn_utils.pinn import compute_unique_derivatives
+from pinn_utils.derivatives import compute_unique_derivatives, derivatives, jacobian
 from torch.testing import assert_close
 
 def test_simple_polynomial():
@@ -116,6 +116,57 @@ def test_third_order_polynomial():
     assert_close(derivs["x0_x0_x1"], torch.tensor([dx0_dx0_dx1]))
     assert_close(derivs["x0_x1_x1"], torch.tensor([dx0_dx1_dx1]))
     assert_close(derivs["x1_x1_x1"], torch.tensor([dx1_dx1_dx1]))
+
+
+# --- derivatives() ---
+
+def test_derivatives_order_zero():
+    x = torch.tensor([[2.0]], requires_grad=True)
+    y = x ** 2
+    result = derivatives(y, x, order=0)
+    assert len(result) == 1
+    assert_close(result[0], torch.tensor([[4.0]]))
+
+def test_derivatives_polynomial():
+    # y = x², y' = 2x, y'' = 2
+    x = torch.tensor([[1.0], [2.0], [3.0]], requires_grad=True)
+    y = x ** 2
+    result = derivatives(y, x, order=2)
+    assert len(result) == 3
+    assert_close(result[0], torch.tensor([[1.0], [4.0], [9.0]]))
+    assert_close(result[1], torch.tensor([[2.0], [4.0], [6.0]]))
+    assert_close(result[2], torch.tensor([[2.0], [2.0], [2.0]]))
+
+def test_derivatives_multi_output():
+    # y = [x², x³], y' = [[2x, 3x²]]
+    x = torch.tensor([[1.0], [2.0]], requires_grad=True)
+    y = torch.cat([x ** 2, x ** 3], dim=1)
+    result = derivatives(y, x, order=1)
+    assert len(result) == 2
+    assert_close(result[1], torch.tensor([[2.0, 3.0], [4.0, 12.0]]))
+
+
+# --- jacobian() ---
+
+def test_jacobian_linear():
+    # f(x) = [x0 + 2x1, 3x0 - x1], J = [[1, 2], [3, -1]]
+    def f(x):
+        return torch.stack([x[:, 0] + 2 * x[:, 1], 3 * x[:, 0] - x[:, 1]], dim=1)
+
+    X = torch.tensor([[1.0, 1.0]], requires_grad=True)
+    J = jacobian(f, X)
+
+    assert J.shape == (1, 2, 2)
+    assert_close(J, torch.tensor([[[1.0, 2.0], [3.0, -1.0]]]), atol=1e-6, rtol=1e-6)
+
+def test_jacobian_shape():
+    # f: R^3 → R^2, batch_size=2
+    def f(x):
+        return torch.stack([x[:, 0] * x[:, 1], x[:, 1] * x[:, 2]], dim=1)
+
+    X = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], requires_grad=True)
+    J = jacobian(f, X)
+    assert J.shape == (2, 2, 3)
 
 
 if __name__ == "__main__":

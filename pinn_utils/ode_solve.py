@@ -24,7 +24,7 @@ def factorials_up_to_n(n :int) -> torch.Tensor:
         facs[k] = facs[k-1] * k
     return facs
 
-def taylor_polynomial(a: float, ics: List[float]):
+def taylor_polynomial(a: float, ics: List[float]) -> Callable[[torch.Tensor], torch.Tensor]:
     """
     Generate Taylor polynomial centered at a
     of degree len(ics) - 1 using the ics to get coefficients
@@ -43,7 +43,7 @@ def taylor_polynomial(a: float, ics: List[float]):
         return result.squeeze(0) if result.shape[0] == 1 else result  # handle scalar x
     return g
 
-def get_y_trial(a: float, ics: list, NN: nn.Module):
+def get_y_trial(a: float, ics: list, NN: nn.Module) -> Callable[[torch.Tensor], torch.Tensor]:
     """
     given a point a as a center,
     a list y(a), y'(a),... y^(n)(a)
@@ -61,7 +61,7 @@ def get_y_trial(a: float, ics: list, NN: nn.Module):
     
     return y_trial
 
-def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
+def get_loss(a: float, ics: List[float], NN: nn.Module, F: Callable[..., torch.Tensor]) -> Callable[[torch.Tensor], torch.Tensor]:
     """
     generating the loss function 
     based on F(x,y,y',...y^n) = 0
@@ -78,14 +78,14 @@ def get_loss(a: float, ics: List[float], NN:nn.Module, F:Callable) ->Callable:
 
 
 def ode_solve(
-        F : Callable,
+        F : Callable[..., torch.Tensor],
         a : float,
         ics : List[float | torch.Tensor],
         X : torch.Tensor,
         NN : PINN,
         return_checkpoints : bool = False,
         **train_args : dict
-):
+) -> Callable | tuple[Callable, list]:
     """
     Wrapper to call solve for an ODE
     Parameters
@@ -148,5 +148,6 @@ def ode_solve(
 
     solution = get_y_trial(a, ics, NN)
     if return_checkpoints:
+        assert wrapped_checkpoints is not None
         return solution, wrapped_checkpoints
     return solution

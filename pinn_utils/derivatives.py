@@ -37,7 +37,7 @@ def derivatives(y: torch.Tensor, x: torch.Tensor, order: int) -> List[torch.Tens
     return derivs  # [y, y', y'', ..., y^(order)]
 
 
-def compute_unique_derivatives(f, x, order=2):
+def compute_unique_derivatives(f: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor, order: int = 2) -> list[dict[str, torch.Tensor]]:
     """
     Compute all unique derivatives of f output up to a given order.
     Mixed partials are treated as equal (∂²/∂x∂y = ∂²/∂y∂x).
@@ -53,8 +53,10 @@ def compute_unique_derivatives(f, x, order=2):
 
     Returns
     -------
-    derivs_per_output: list of dicts, one per output
-        Each dict maps derivative name -> tensor (batch_size,)
+    derivs_per_output: list[dict[str, torch.Tensor]], one entry per output
+        Each dict maps derivative name -> tensor of shape (batch_size,).
+        Keys: 'y' (the output), 'x0', 'x1', ... (first-order partials),
+        'x0_x0', 'x0_x1', ... (higher-order partials).
     """
     _ , num_inputs = x.shape
     y = f(x)
@@ -77,11 +79,11 @@ def compute_unique_derivatives(f, x, order=2):
             deriv_dict[f"x{i}"] = grad
 
         # Store for recursive construction
-        prev_derivs = { (i,): first_order[i] for i in range(num_inputs) }
+        prev_derivs: dict[tuple[int, ...], torch.Tensor] = {(i,): first_order[i] for i in range(num_inputs)}
 
         # Higher-order derivatives
         for ord in range(2, order + 1):
-            new_derivs = {}
+            new_derivs: dict[tuple[int, ...], torch.Tensor] = {}
             for combo in combinations_with_replacement(range(num_inputs), ord):
                 shorter = combo[:-1]
                 last = combo[-1]
@@ -100,7 +102,7 @@ def compute_unique_derivatives(f, x, order=2):
     return derivs_per_output
 
 
-def jacobian(u, X):
+def jacobian(u: Callable[[torch.Tensor], torch.Tensor], X: torch.Tensor) -> torch.Tensor:
     """
     Computes the Jacobian J for a function u: R^m -> R^n evaluated at X.
     

@@ -3,11 +3,18 @@ module to solve PDEs
 or systems of PDEs
 """
 import torch
+import torch.nn as nn
 from typing import List, Callable
 from .pinn import PINN
 from .training import train 
 
-def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=None):
+def get_pde_loss(
+    NN: nn.Module,
+    de_eq: Callable[[nn.Module, torch.Tensor], torch.Tensor],
+    ic_conditions: List[tuple] | None = None,
+    bc_conditions: List[tuple] | None = None,
+    DE_params: dict | None = None,
+) -> Callable[..., torch.Tensor]:
     """
     Returns a loss function compatible with your `train()` loop.
 
@@ -67,15 +74,14 @@ def get_pde_loss(NN, de_eq, ic_conditions=None, bc_conditions=None, DE_params=No
     return loss_fn
 
 def pde_solve(
-        DE : Callable,
+        DE : Callable[[nn.Module, torch.Tensor], torch.Tensor],
         X_DE : torch.Tensor,
         NN : PINN,
         IC_list : List[tuple] | None = None,
         BC_list : List[tuple] | None = None,
         DE_params : dict | None = None,
         **train_params : dict
-        
-):
+) -> PINN:
     """
     Given a differential equation, a region, a PINN, a list of ICs and list of BCS,
     and a dictionary of any parameters for the DE, train the PINN to get a solution
@@ -97,6 +103,11 @@ def pde_solve(
         any additional arguments expected by the DE function (e.g. {"alpha": 0.1})
     train_params : dict
         any additional parameters to be passed to train()
+
+    Returns
+    -------
+    NN : PINN
+        the trained neural network
     """
     # first get the loss function for this PDE
     loss_fn = get_pde_loss(
